@@ -5,15 +5,16 @@
 # It will then extract the relevant pages from the PDF doc and rename them according
 # to their tag.
 import functools
+import logging
 import multiprocessing
 import pathlib
 import re
 
 import numpy
-import pypdf
-import click
 import pandas
-import logging
+import pypdf
+
+import parallelize
 
 
 # # Parse command args
@@ -51,8 +52,7 @@ def search_and_split(input_path, output_path):
         nf_tag_hits = tag_hits.loc[tag_hits['Page'] == -1]
 
         # search for tag locations within the pdf
-        get_tag_hits_partial = functools.partial(get_tag_hits, pdf)
-        nf_tag_hits = parallelize_dataframe(nf_tag_hits, get_tag_hits_partial)
+        nf_tag_hits = get_tag_hits(pdf, nf_tag_hits)
 
         # split pdf based on tag locations
         split_pdf(nf_tag_hits, pdf, output_folder)
@@ -114,10 +114,10 @@ def get_tag_hits(pdf_source, tag_hits):
     :return: a dataframe of tags and the page number where they are found
     """
     # create pdf reader
-    with pypdf.PdfReader(pdf_source) as pdf_reader:
+    pdf_reader = pypdf.PdfReader(pdf_source)
 
-        # search pdf for each hit, then store page number in 'Page' column
-        tag_hits['Page'] = tag_hits.apply(lambda row: search_pdf(row['Tag No'], pdf_reader), axis=1)
+    search_pdf_partial = functools.partial(search_pdf, pdf_reader)
+    tag_hits = tag_hits.apply(search_pdf_partial, axis=1)
 
     # record source pdf
     tag_hits['Source'] = pdf_source.stem
@@ -125,15 +125,20 @@ def get_tag_hits(pdf_source, tag_hits):
     return tag_hits
 
 
-def search_pdf(pdf_reader, text):
+def search_pdf(pdf_reader, tag_hit):
     """
     Searches through the PDF for the first hit of the text.
-    :param text: the text to search for
+    :param tag_hit: the tag hit to operate on
     :param pdf_reader: the pdf to search in
     :return: the page number where the text is found
     """
-    # # create pdf reader
-    # with pypdf.PdfReader(pdf) as pdf_reader:
+    # page has already been found, return immediately
+    if tag_hit['Page'] != -1:
+        return tag_hit['Page']
+
+    # make Tag No searchable
+    tag_sections = tag_hit['Tag No'].split(".")
+    tag_search = f"{tag_sections[-2]}.{tag_sections[-1]}"
 
     # search through each page of the pdf
     for page_number, page in enumerate(pdf_reader.pages):
@@ -141,37 +146,13 @@ def search_pdf(pdf_reader, text):
         page_text = page.extract_text()
 
         # if found, return page number where text is found
-        if re.search(text, page_text):
-            logging.debug(f"'{text}' found on page {page_number}")
+        if re.search(tag_search, page_text):
+            logging.debug(f"'{tag_hit['Tag No']}' found on page {page_number}")
             return page_number
 
     # if not found, return -1
-    logging.debug(f"'{text}' not found")
+    logging.debug(f"'{tag_hit['Tag No']}' not found")
     return -1
-
-
-def parallelize_dataframe(dataframe, function, n_cores=4):
-    """
-    Parallelize a function applied to a dataframe.
-    :param dataframe: the dataframe
-    :param function: the function
-    :param n_cores: the number of processes to create
-    :return: the processed dataframe
-    """
-    # split the dataframe
-    split_dataframe = numpy.array_split(dataframe, n_cores)
-
-    # create a process pool
-    pool = multiprocessing.Pool(n_cores)
-
-    # map the pool to the split dataframe and apply the function
-    dataframe = pandas.concat(pool.map(function, split_dataframe))
-
-    # close and cleanup the pool
-    pool.close()
-    pool.join()
-
-    return dataframe
 
 
 def get_tag_name(tag):
