@@ -52,7 +52,7 @@ def search_and_split(input_path, output_path):
 
         # search for tag locations within the pdf
         get_tag_hits_partial = functools.partial(get_tag_hits, pdf)
-        nf_tag_hits = parallelize_dataframe(get_tag_hits_partial, nf_tag_hits)
+        nf_tag_hits = parallelize_dataframe(nf_tag_hits, get_tag_hits_partial)
 
         # split pdf based on tag locations
         split_pdf(nf_tag_hits, pdf, output_folder)
