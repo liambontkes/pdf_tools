@@ -46,7 +46,6 @@ def search_and_split(input_path, output_path):
 
     # process each input pdf
     for pdf in pdf_input_list:
-
         # search for tag locations within the pdf
         tag_hits = get_tag_hits(tag_list, pdf)
 
@@ -181,6 +180,7 @@ def search_pdf(text, pdf):
 def split_pdf(tag_hits, pdf_source, output_folder):
     """
     Creates a new file for each tag in tag hits, composed of the relevant pages from the pdf source.
+    :param output_folder: the folder to write to
     :param tag_hits: the dataframe of tags and the first page they found in pdf source
     :param pdf_source: the pdf source document
     :return: none
@@ -192,7 +192,7 @@ def split_pdf(tag_hits, pdf_source, output_folder):
     pdf_reader = pypdf.PdfReader(pdf_source)
 
     # iterate through each tag in tag hits
-    for tag_idx, tag_hit in tag_hits.iterrows():
+    for tag_idx, hit in tag_hits.iterrows():
 
         # set idx for next tag in list
         next_tag_idx = tag_idx + 1
@@ -212,6 +212,7 @@ def split_pdf(tag_hits, pdf_source, output_folder):
 
         # catch tags which were not found
         if page_range['first'] == -1:
+            logging.info(f"{tag_hits.at[tag_idx, 'Tag No']} not found in {pdf_source.stem}, skipping...")
             # skip this tag
             continue
 
@@ -232,7 +233,8 @@ def split_pdf(tag_hits, pdf_source, output_folder):
                 page_range['last'] = len(pdf_reader.pages)
 
         # generate output's file name
-        tag_name = get_tag_name(tag_hits.at[tag_idx, 'Tag No'])
+        # tag_name = get_tag_name(tag_hits.at[tag_idx, 'Tag No'])
+        tag_name = tag_hits.at[tag_idx, 'Tag No']
         output_name = output_folder / f'{tag_name}.pdf'
 
         # extract all pages in page range
@@ -244,7 +246,7 @@ def split_pdf(tag_hits, pdf_source, output_folder):
         with open(output_name, 'wb') as output_file:
             pdf_writer.write(output_file)
 
-        logging.info(f"Generated PDF for tag no {tag_hits.at[tag_idx, 'Tag No']} at {output_name.name}")
+        logging.info(f"Generated PDF for Tag No {tag_hits.at[tag_idx, 'Tag No']} at {output_name.name}")
 
 
 if __name__ == '__main__':
