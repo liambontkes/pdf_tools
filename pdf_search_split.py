@@ -6,266 +6,184 @@
 # to their tag.
 import functools
 import logging
-import multiprocessing
 import pathlib
 import re
 
-import numpy
-import pandas
 import pypdf
 
-import parallelize
+import search_calibration
+import constants
 
 
-# # Parse command args
-# @click.command()
-# @click.option("--tags", help="The file path to parse for the list of tags. Ensure it uses the correct path formatting.")
-# @click.option("--pdf", help="The file to search for pages related to the tags. Ensure it uses the correct path "
-#                             "formatting.")
-def search_and_split(input_path, output_path):
-    """
-    Searches the Excel file in the input folder for a list of tags, then searches the PDF documents for each tag.
-    When found, extracts all tagged pages and saves them to the output folder.
-    :param input_path: the input folder to search in
-    :param output_path: the output folder to write to
-    :returns: none
-    """
-    # create input and output folders
-    input_folder = pathlib.Path(input_path)
-    input_folder.mkdir(parents=True, exist_ok=True)
-    logging.info(f'Created input folder {input_folder.name}')
+class SearchAndSplit:
+    def __init__(self, search_type, input_path, output_path):
+        self.search_type = search_type
+        self.input_folder = pathlib.Path(input_path)
+        self.output_folder = pathlib.Path(output_path)
 
-    output_folder = pathlib.Path(output_path)
-    output_folder.mkdir(parents=True, exist_ok=True)
-    logging.info(f'Created output folder {output_folder.name}')
+        # create input and output folders
+        self.input_folder.mkdir(parents=True, exist_ok=True)
+        logging.info(f'Created input folder {self.input_folder.name}')
 
-    # get list of pdfs to process
-    pdf_input_list = get_input_pdfs(input_folder)
+        self.output_folder.mkdir(parents=True, exist_ok=True)
+        logging.info(f'Created output folder {self.output_folder.name}')
 
-    # get list of tags
-    tag_hits = get_tags(input_folder)
+    def search_and_split(self):
+        """
+        Searches the Excel file in the input folder for a list of tags, then searches the PDF documents for each tag.
+        When found, extracts all tagged pages and saves them to the output folder.
+        """
+        # get list of pdfs to process
+        pdf_input_list = self._get_input_pdfs()
 
-    # process each input pdf
-    for pdf in pdf_input_list:
+        # get list of search items
+        search_items = self._get_search_items()
 
-        # only process tags that have not been found
-        nf_tag_hits = tag_hits.loc[tag_hits['Page'] == -1]
+        # process each input pdf
+        for pdf in pdf_input_list:
+            # filter out items that have already been found
+            nf_search_items = search_items.loc[search_items['Page'] == constants.NOT_FOUND]
 
-        # search for tag locations within the pdf
-        nf_tag_hits = get_tag_hits(pdf, nf_tag_hits)
+            # search for item locations within the pdf
+            nf_search_items = self._get_search_hits(pdf, nf_search_items)
 
-        logging.debug(nf_tag_hits)
+            # split pdf based on tag locations
+            self._split_pdf(nf_search_items, pdf)
 
-        # split pdf based on tag locations
-        split_pdf(nf_tag_hits, pdf, output_folder)
+            logging.info(f"Done processing {pdf.name}")
 
-        logging.info(f"Done processing {pdf.name}")
+            # update tag hits
+            search_items.update(nf_search_items)
 
-        # update tag hits
-        tag_hits.update(nf_tag_hits)
-        # tag_hits.merge(nf_tag_hits, on='Tag No', how='left')
+        # dump tag hits
+        self.dump_dataframe(search_items)
 
-    # dump tag hits
-    dump_dataframe(tag_hits, output_folder)
+    def _get_input_pdfs(self):
+        """
+        Generates a list of PDFs to search.
+        :return: a list of paths
+        """
+        pdf_list = sorted(pathlib.Path(self.input_folder).glob('*.pdf'))
 
+        logging.info(f"Found {len(pdf_list)} PDFs to process in {self.input_folder.name}")
 
-def get_input_pdfs(input_folder):
-    """
-    Generates a list of PDFs to search.
-    :param input_folder: the folder to search in
-    :return: a list of paths
-    """
-    pdf_list = sorted(pathlib.Path(input_folder).glob('*.pdf'))
+        logging.debug(f"PDF process list: \n{pdf_list}")
 
-    logging.info(f"Found {len(pdf_list)} PDFs to process in {input_folder.name}")
-    logging.debug(f"PDF process list: \n{pdf_list}")
+        return pdf_list
 
-    return pdf_list
+    def _get_search_items(self):
+        """
+        Gets a list of items to search for from the input folder.
+        :return: a list of search items
+        """
+        if self.search_type == 'calibration':
+            return search_calibration.get_tag_list(self.input_folder)
 
+    def _get_search_hits(self, pdf_source, nf_search_items):
+        """
+        Generates a dataframe of search items and their location in the pdf document.
+        :param nf_search_items: the list of items to search for
+        :param pdf_source: the path to the pdf document to search
+        :return: a dataframe of items and the page number where they are found
+        """
+        # create pdf reader
+        pdf_reader = pypdf.PdfReader(pdf_source)
 
-def get_tags(input_folder):
-    """
-    Gets a list of tags from the passed input folder.
-    :param input_folder: the input folder to search in for the Excel file
-    :return: a list of tags
-    """
-    # select first Excel file found in input folder
-    tags_source = sorted(pathlib.Path(input_folder).glob('*.xlsx'))[0]
+        if self.search_type == 'calibration':
+            search_pdf_partial = functools.partial(search_calibration.search_for_tags, pdf_reader)
+        else:
+            search_pdf_partial = functools.partial(search_calibration.search_for_tags, pdf_reader)
 
-    # extract list of tags from Excel file
-    tag_hits = pandas.read_excel(tags_source, sheet_name='Instrument Index', usecols=['Tag No'])
+        nf_search_items = nf_search_items.apply(search_pdf_partial, axis=1)
+        # record source pdf
+        nf_search_items['Source'] = pdf_source.stem
 
-    logging.info(f'Extracted tag list, found {len(tag_hits)} tags')
+        return nf_search_items
 
-    # clean tags numbers
-    tag_hits = tag_hits.dropna()
-    tag_hits = tag_hits.replace(to_replace='-', value='_', regex=True)
+    def _split_pdf(self, search_hits, pdf_source):
+        """
+        Creates a new file for each tag in tag hits, composed of the relevant pages from the pdf source.
+        :param search_hits: the dataframe of search items and the first page they are found in pdf source
+        :param pdf_source: the pdf source document
+        """
+        # sort tag hits by page number
+        search_hits = search_hits.sort_values(by='Page')
+        logging.debug(f"Search items to split from source pdf:\n{search_hits}")
 
-    logging.debug(f"Cleaned tag list: \n{tag_hits}")
+        # create pdf reader
+        pdf_reader = pypdf.PdfReader(pdf_source)
 
-    # add columns to tag_hits
-    tag_hits['Page'] = -1
-    tag_hits['Source'] = ''
+        # iterate through each tag in tag hits
+        for item_idx, hit in search_hits.iterrows():
 
-    return tag_hits
+            # set idx for next tag in list
+            next_item_idx = item_idx + 1
 
+            # find the first and last page related to the tag
+            page_range = {
+                'first': search_hits.at[item_idx, 'Page']
+            }
 
-def get_tag_hits(pdf_source, nf_tag_hits):
-    """
-    Generates a dataframe of tags and their location in the pdf document.
-    :param nf_tag_hits: the list of tags to search for
-    :param pdf_source: the path to the pdf document to search
-    :return: a dataframe of tags and the page number where they are found
-    """
-    # create pdf reader
-    pdf_reader = pypdf.PdfReader(pdf_source)
-
-    search_pdf_partial = functools.partial(search_pdf, pdf_reader)
-    nf_tag_hits = nf_tag_hits.apply(search_pdf_partial, axis=1)
-
-    # record source pdf
-    nf_tag_hits['Source'] = pdf_source.stem
-
-    return nf_tag_hits
-
-
-def search_pdf(pdf_reader, tag_hit):
-    """
-    Searches through the PDF for the first hit of the text.
-    :param tag_hit: the tag hit to operate on
-    :param pdf_reader: the pdf to search in
-    :return: the page number where the text is found
-    """
-    # make Tag No searchable
-    tag_sections = tag_hit['Tag No'].split(".")
-    tag_search = f"{tag_sections[-2]}.{tag_sections[-1]}"
-
-    # search through each page of the pdf
-    for page_number, page in enumerate(pdf_reader.pages):
-
-        # read text from pdf page
-        page_text = page.extract_text()
-
-        # if found, save page number where text is found
-        if re.search(tag_search, page_text):
-            logging.debug(f"'{tag_hit['Tag No']}' found on page {page_number}")
-            tag_hit['Page'] = page_number
-            return tag_hit
-
-    # if not found, return
-    logging.debug(f"'{tag_hit['Tag No']}' not found")
-    return tag_hit
-
-
-def get_tag_name(tag):
-    """
-    Creates tag name from the passed tag.
-    :param tag: the passed tag
-    :return: the corresponding tag name
-    """
-    # split tag into it's sections
-    tag_sections = tag.split(".")
-    tag_area = tag_sections[3]
-    tag_id = tag_sections[-1]
-
-    # remove 'connected to' component of tag id
-    if tag_id.find('_') != -1:
-        tag_id = tag_sections[-1].split("_")[-1]
-
-    # create tag name from area and id components
-    # if id and area are the same, use only the id
-    if tag_id == tag_area:
-        tag_name = tag_id
-    else:
-        tag_name = f'{tag_area}.{tag_id}'
-
-    return tag_name
-
-
-def dump_dataframe(dataframe, output_path):
-    """
-    Dumps the generated dataframe to an Excel document in the output folder.
-    :param dataframe:
-    :param output_path:
-    :return:
-    """
-    # create output file name
-    output_name = output_path / "search_split_results.xlsx"
-
-    # dump dataframe to xlsx
-    dataframe.to_excel(output_name, sheet_name='Instrument Index')
-
-
-def split_pdf(tag_hits, pdf_source, output_folder):
-    """
-    Creates a new file for each tag in tag hits, composed of the relevant pages from the pdf source.
-    :param output_folder: the folder to write to
-    :param tag_hits: the dataframe of tags and the first page they found in pdf source
-    :param pdf_source: the pdf source document
-    :return: none
-    """
-    # sort tag hits by page number
-    tag_hits = tag_hits.sort_values(by='Page')
-
-    # create pdf reader
-    pdf_reader = pypdf.PdfReader(pdf_source)
-
-    # iterate through each tag in tag hits
-    for tag_idx, hit in tag_hits.iterrows():
-
-        # set idx for next tag in list
-        next_tag_idx = tag_idx + 1
-
-        # find the first and last page related to the tag
-        page_range = {
-            'first': tag_hits.at[tag_idx, 'Page']
-        }
-
-        # catch key out-of-bounds
-        try:
-            page_range['last'] = tag_hits.at[next_tag_idx, 'Page']
-        except KeyError as error:
-            logging.info(f"Reached last tag, setting last page to end of PDF")
-            logging.debug(error)
-            page_range['last'] = len(pdf_reader.pages)
-
-        # catch tags which were not found
-        if page_range['first'] == -1:
-            logging.info(f"{tag_hits.at[tag_idx, 'Tag No']} not found in {pdf_source.stem}, skipping...")
-            # skip this tag
-            continue
-
-        # catch multiple tags being found on the same page
-        # catch next tag not being found (-1)
-        while page_range['first'] >= page_range['last'] != -1 and page_range['last'] <= len(pdf_reader.pages):
-
-            # increment next tag index
-            next_tag_idx = next_tag_idx + 1
-
-            # update page range
+            # catch key out-of-bounds
             try:
-                page_range['last'] = tag_hits.at[next_tag_idx, 'Page']
+                page_range['last'] = search_hits.at[next_item_idx, 'Page']
+            except KeyError as error:
+                logging.info(f"Reached last tag, setting page range to end of PDF")
+                logging.debug(f"KeyError: {error}")
 
-            # if index is out-of-bounds, set last page to end of pdf
-            except IndexError:
-                logging.info('Reader reached end of PDF')
                 page_range['last'] = len(pdf_reader.pages)
 
-        # generate output's file name
-        # tag_name = get_tag_name(tag_hits.at[tag_idx, 'Tag No'])
-        tag_name = tag_hits.at[tag_idx, 'Tag No']
-        output_name = output_folder / f'{tag_name}.pdf'
+            # catch tags which were not found
+            if page_range['first'] == constants.NOT_FOUND:
+                logging.info(f"{search_hits.iloc[item_idx]} not found in {pdf_source.stem}, skipping split...")
+                # skip this tag
+                continue
 
-        # extract all pages in page range
-        pdf_writer = pypdf.PdfWriter()
-        for page_number in range(page_range['first'], page_range['last']):
-            pdf_writer.add_page(pdf_reader.pages[page_number])
+            # catch multiple tags being found on the same page
+            # catch next tag not being found
+            while page_range['first'] >= page_range['last'] == constants.NOT_FOUND and page_range['last'] <= len(
+                    pdf_reader.pages):
 
-        # write file to disk
-        with open(output_name, 'wb') as output_file:
-            pdf_writer.write(output_file)
+                # increment next tag index
+                next_item_idx = next_item_idx + 1
 
-        logging.info(f"Generated PDF for Tag No {tag_hits.at[tag_idx, 'Tag No']} at {output_name.name}")
+                # update page range
+                try:
+                    page_range['last'] = search_hits.at[next_item_idx, 'Page']
+
+                # if index is out-of-bounds, set last page to end of pdf
+                except KeyError:
+                    logging.info('Reader reached end of PDF')
+                    page_range['last'] = len(pdf_reader.pages)
+
+            # generate output's file name
+            if self.search_type == 'calibration':
+                file_name = search_hits.at[item_idx, 'Tag No']
+            else:
+                file_name = search_hits.at[item_idx, 'Model']
+            output_name = self.output_folder / f'{file_name}.pdf'
+
+            # extract all pages in page range
+            pdf_writer = pypdf.PdfWriter()
+            for page_number in range(page_range['first'], page_range['last']):
+                pdf_writer.add_page(pdf_reader.pages[page_number])
+
+            # write file to disk
+            with open(output_name, 'wb') as output_file:
+                pdf_writer.write(output_file)
+
+            logging.info(f"Generated PDF for Tag No {search_hits.iloc[item_idx]} at {output_name.name}")
+
+    def dump_dataframe(self, dataframe):
+        """
+        Dumps the generated dataframe to an Excel document in the output folder.
+        :param dataframe:
+        """
+        # create output file name
+        output_name = self.output_folder / "search_split_results.xlsx"
+
+        # dump dataframe to xlsx
+        dataframe.to_excel(output_name, sheet_name='Instrument Index')
 
 
 if __name__ == '__main__':
@@ -276,4 +194,6 @@ if __name__ == '__main__':
     input_folder_path = r"input/"
     output_folder_path = r"output/"
 
-    search_and_split(input_path=input_folder_path, output_path=output_folder_path)
+    # run search and split
+    calibration_sas = SearchAndSplit('calibration', input_folder_path, output_folder_path)
+    calibration_sas.search_and_split()
