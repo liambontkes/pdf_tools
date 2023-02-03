@@ -33,7 +33,7 @@ def get_tag_list(input_folder):
     return search_hits
 
 
-def search_for_tags(pdf_reader, search_item):
+def search_for_tag(pdf_reader, search_item):
     """
     Searches through the PDF for the first hit of the item.
     :param search_item: the search item to operate on
@@ -43,6 +43,12 @@ def search_for_tags(pdf_reader, search_item):
     # make Tag No searchable
     tag_sections = search_item['Tag No'].split(".")
     tag_search = f"{tag_sections[-2]}.{tag_sections[-1]}"
+
+    # only search for tags with 'T' or 'I'
+    matches = ['T', 'I', 'E']
+    if not any([x in tag_sections[-1] for x in matches]):
+        logging.info(f"Tag {search_item['Tag No']} is not type 'Indicator' or 'Transmitter', skipping search...")
+        return search_item
 
     # search through each page of the pdf
     for page_number, page in enumerate(pdf_reader.pages):
@@ -58,6 +64,10 @@ def search_for_tags(pdf_reader, search_item):
 
     # if not found, return
     logging.debug(f"'{search_item['Tag No']}' not found")
+    return search_item
+
+
+def filter_tags(search_item):
     return search_item
 
 

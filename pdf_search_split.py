@@ -13,6 +13,7 @@ import pypdf
 
 import search_calibration
 import constants
+import search_models
 
 
 class SearchAndSplit:
@@ -41,8 +42,8 @@ class SearchAndSplit:
 
         # process each input pdf
         for pdf in pdf_input_list:
-            # filter out items that have already been found
-            nf_search_items = search_items.loc[search_items['Page'] == constants.NOT_FOUND]
+            # filter out items
+            nf_search_items = self._filter_search_items(search_items)
 
             # search for item locations within the pdf
             nf_search_items = self._get_search_hits(pdf, nf_search_items)
@@ -78,6 +79,18 @@ class SearchAndSplit:
         """
         if self.search_type == 'calibration':
             return search_calibration.get_tag_list(self.input_folder)
+        else:
+            return search_models.get_model_list(self.input_folder)
+
+    def _filter_search_items(self, search_items):
+        # only search for items that have not been found
+        filtered_items = search_items.loc[search_items['Page'] == constants.NOT_FOUND]
+
+        # context dependent filtering
+        if self.search_type == 'calibration':
+            return search_calibration.filter_tags(filtered_items)
+        else:
+            return search_models.filter_models(filtered_items)
 
     def _get_search_hits(self, pdf_source, nf_search_items):
         """
@@ -90,11 +103,12 @@ class SearchAndSplit:
         pdf_reader = pypdf.PdfReader(pdf_source)
 
         if self.search_type == 'calibration':
-            search_pdf_partial = functools.partial(search_calibration.search_for_tags, pdf_reader)
+            search_pdf_partial = functools.partial(search_calibration.search_for_tag, pdf_reader)
         else:
-            search_pdf_partial = functools.partial(search_calibration.search_for_tags, pdf_reader)
+            search_pdf_partial = functools.partial(search_models.search_for_models, pdf_reader)
 
         nf_search_items = nf_search_items.apply(search_pdf_partial, axis=1)
+
         # record source pdf
         nf_search_items['Source'] = pdf_source.stem
 
@@ -107,7 +121,7 @@ class SearchAndSplit:
         :param pdf_source: the pdf source document
         """
         # sort tag hits by page number
-        search_hits = search_hits.sort_values(by='Page')
+        search_hits = search_hits.sort_values(by='Page').reset_index(drop=True)
         logging.debug(f"Search items to split from source pdf:\n{search_hits}")
 
         # create pdf reader
@@ -141,7 +155,8 @@ class SearchAndSplit:
 
             # catch multiple tags being found on the same page
             # catch next tag not being found
-            while page_range['first'] >= page_range['last'] == constants.NOT_FOUND and page_range['last'] <= len(
+            while page_range['first'] >= page_range['last'] or page_range['last'] == constants.NOT_FOUND and page_range[
+                'last'] <= len(
                     pdf_reader.pages):
 
                 # increment next tag index
@@ -172,7 +187,7 @@ class SearchAndSplit:
             with open(output_name, 'wb') as output_file:
                 pdf_writer.write(output_file)
 
-            logging.info(f"Generated PDF for Tag No {search_hits.iloc[item_idx]} at {output_name.name}")
+            logging.info(f"Generated PDF for \n{search_hits.iloc[item_idx]}\n at {output_name.name}")
 
     def dump_dataframe(self, dataframe):
         """

@@ -56,3 +56,7 @@ def search_for_models(pdf_reader, search_item):
     # if not found, return
     logging.debug(f"'{search_item['Model']}' not found")
     return search_item
+
+
+def filter_models(filtered_items):
+    return filtered_items
