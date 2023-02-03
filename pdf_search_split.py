@@ -54,13 +54,16 @@ def search_and_split(input_path, output_path):
         # search for tag locations within the pdf
         nf_tag_hits = get_tag_hits(pdf, nf_tag_hits)
 
+        logging.debug(nf_tag_hits)
+
         # split pdf based on tag locations
         split_pdf(nf_tag_hits, pdf, output_folder)
 
         logging.info(f"Done processing {pdf.name}")
 
         # update tag hits
-        pandas.merge(tag_hits, nf_tag_hits, on='Tag No', how='outer')
+        tag_hits.update(nf_tag_hits)
+        # tag_hits.merge(nf_tag_hits, on='Tag No', how='left')
 
     # dump tag hits
     dump_dataframe(tag_hits, output_folder)
@@ -95,6 +98,7 @@ def get_tags(input_folder):
     logging.info(f'Extracted tag list, found {len(tag_hits)} tags')
 
     # clean tags numbers
+    tag_hits = tag_hits.dropna()
     tag_hits = tag_hits.replace(to_replace='-', value='_', regex=True)
 
     logging.debug(f"Cleaned tag list: \n{tag_hits}")
@@ -106,10 +110,10 @@ def get_tags(input_folder):
     return tag_hits
 
 
-def get_tag_hits(pdf_source, tag_hits):
+def get_tag_hits(pdf_source, nf_tag_hits):
     """
     Generates a dataframe of tags and their location in the pdf document.
-    :param tag_hits: the list of tags to search for
+    :param nf_tag_hits: the list of tags to search for
     :param pdf_source: the path to the pdf document to search
     :return: a dataframe of tags and the page number where they are found
     """
@@ -117,12 +121,12 @@ def get_tag_hits(pdf_source, tag_hits):
     pdf_reader = pypdf.PdfReader(pdf_source)
 
     search_pdf_partial = functools.partial(search_pdf, pdf_reader)
-    tag_hits = tag_hits.apply(search_pdf_partial, axis=1)
+    nf_tag_hits = nf_tag_hits.apply(search_pdf_partial, axis=1)
 
     # record source pdf
-    tag_hits['Source'] = pdf_source.stem
+    nf_tag_hits['Source'] = pdf_source.stem
 
-    return tag_hits
+    return nf_tag_hits
 
 
 def search_pdf(pdf_reader, tag_hit):
@@ -132,10 +136,6 @@ def search_pdf(pdf_reader, tag_hit):
     :param pdf_reader: the pdf to search in
     :return: the page number where the text is found
     """
-    # page has already been found, return immediately
-    if tag_hit['Page'] != -1:
-        return tag_hit['Page']
-
     # make Tag No searchable
     tag_sections = tag_hit['Tag No'].split(".")
     tag_search = f"{tag_sections[-2]}.{tag_sections[-1]}"
@@ -143,16 +143,18 @@ def search_pdf(pdf_reader, tag_hit):
     # search through each page of the pdf
     for page_number, page in enumerate(pdf_reader.pages):
 
+        # read text from pdf page
         page_text = page.extract_text()
 
-        # if found, return page number where text is found
+        # if found, save page number where text is found
         if re.search(tag_search, page_text):
             logging.debug(f"'{tag_hit['Tag No']}' found on page {page_number}")
-            return page_number
+            tag_hit['Page'] = page_number
+            return tag_hit
 
-    # if not found, return -1
+    # if not found, return
     logging.debug(f"'{tag_hit['Tag No']}' not found")
-    return -1
+    return tag_hit
 
 
 def get_tag_name(tag):
@@ -203,67 +205,67 @@ def split_pdf(tag_hits, pdf_source, output_folder):
     :return: none
     """
     # sort tag hits by page number
-    tag_hits.sort_values(by=['Page'])
+    tag_hits = tag_hits.sort_values(by='Page')
 
     # create pdf reader
-    with pypdf.PdfReader(pdf_source) as pdf_reader:
+    pdf_reader = pypdf.PdfReader(pdf_source)
 
-        # iterate through each tag in tag hits
-        for tag_idx, hit in tag_hits.iterrows():
+    # iterate through each tag in tag hits
+    for tag_idx, hit in tag_hits.iterrows():
 
-            # set idx for next tag in list
-            next_tag_idx = tag_idx + 1
+        # set idx for next tag in list
+        next_tag_idx = tag_idx + 1
 
-            # find the first and last page related to the tag
-            page_range = {
-                'first': tag_hits.at[tag_idx, 'Page']
-            }
+        # find the first and last page related to the tag
+        page_range = {
+            'first': tag_hits.at[tag_idx, 'Page']
+        }
 
-            # catch key out-of-bounds
+        # catch key out-of-bounds
+        try:
+            page_range['last'] = tag_hits.at[next_tag_idx, 'Page']
+        except KeyError as error:
+            logging.info(f"Reached last tag, setting last page to end of PDF")
+            logging.debug(error)
+            page_range['last'] = len(pdf_reader.pages)
+
+        # catch tags which were not found
+        if page_range['first'] == -1:
+            logging.info(f"{tag_hits.at[tag_idx, 'Tag No']} not found in {pdf_source.stem}, skipping...")
+            # skip this tag
+            continue
+
+        # catch multiple tags being found on the same page
+        # catch next tag not being found (-1)
+        while page_range['first'] >= page_range['last'] != -1 and page_range['last'] <= len(pdf_reader.pages):
+
+            # increment next tag index
+            next_tag_idx = next_tag_idx + 1
+
+            # update page range
             try:
                 page_range['last'] = tag_hits.at[next_tag_idx, 'Page']
-            except KeyError as error:
-                logging.info(f"Reached last tag, setting last page to end of PDF")
-                logging.debug(error)
+
+            # if index is out-of-bounds, set last page to end of pdf
+            except IndexError:
+                logging.info('Reader reached end of PDF')
                 page_range['last'] = len(pdf_reader.pages)
 
-            # catch tags which were not found
-            if page_range['first'] == -1:
-                logging.info(f"{tag_hits.at[tag_idx, 'Tag No']} not found in {pdf_source.stem}, skipping...")
-                # skip this tag
-                continue
+        # generate output's file name
+        # tag_name = get_tag_name(tag_hits.at[tag_idx, 'Tag No'])
+        tag_name = tag_hits.at[tag_idx, 'Tag No']
+        output_name = output_folder / f'{tag_name}.pdf'
 
-            # catch multiple tags being found on the same page
-            # catch next tag not being found (-1)
-            while page_range['first'] >= page_range['last'] != -1 and page_range['last'] <= len(pdf_reader.pages):
+        # extract all pages in page range
+        pdf_writer = pypdf.PdfWriter()
+        for page_number in range(page_range['first'], page_range['last']):
+            pdf_writer.add_page(pdf_reader.pages[page_number])
 
-                # increment next tag index
-                next_tag_idx = next_tag_idx + 1
+        # write file to disk
+        with open(output_name, 'wb') as output_file:
+            pdf_writer.write(output_file)
 
-                # update page range
-                try:
-                    page_range['last'] = tag_hits.at[next_tag_idx, 'Page']
-
-                # if index is out-of-bounds, set last page to end of pdf
-                except IndexError:
-                    logging.info('Reader reached end of PDF')
-                    page_range['last'] = len(pdf_reader.pages)
-
-            # generate output's file name
-            # tag_name = get_tag_name(tag_hits.at[tag_idx, 'Tag No'])
-            tag_name = tag_hits.at[tag_idx, 'Tag No']
-            output_name = output_folder / f'{tag_name}.pdf'
-
-            # extract all pages in page range
-            with pypdf.PdfWriter as pdf_writer:
-                for page_number in range(page_range['first'], page_range['last']):
-                    pdf_writer.add_page(pdf_reader.pages[page_number])
-
-                # write file to disk
-                with open(output_name, 'wb') as output_file:
-                    pdf_writer.write(output_file)
-
-            logging.info(f"Generated PDF for Tag No {tag_hits.at[tag_idx, 'Tag No']} at {output_name.name}")
+        logging.info(f"Generated PDF for Tag No {tag_hits.at[tag_idx, 'Tag No']} at {output_name.name}")
 
 
 if __name__ == '__main__':
