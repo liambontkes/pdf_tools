@@ -68,6 +68,15 @@ def search_for_tag(pdf_reader, search_item):
 
 
 def filter_tags(search_item):
+    # make Tag No searchable
+    tag_sections = search_item['Tag No'].split(".")
+    tag_search = f"{tag_sections[-2]}.{tag_sections[-1]}"
+
+    # only search for tags with 'T' or 'I'
+    matches = ['T', 'I', 'E']
+    if not any([x in tag_sections[-1] for x in matches]):
+        logging.info(f"Tag {search_item['Tag No']} is not type 'Indicator' or 'Transmitter', skipping search...")
+        return search_item
     return search_item
 
 

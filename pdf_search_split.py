@@ -8,6 +8,8 @@ import functools
 import logging
 import pathlib
 import re
+import datetime
+import time
 
 import pypdf
 
@@ -34,11 +36,17 @@ class SearchAndSplit:
         Searches the Excel file in the input folder for a list of tags, then searches the PDF documents for each tag.
         When found, extracts all tagged pages and saves them to the output folder.
         """
+        # start timer
+        start_time = time.time()
+        logging.info(f"Starting execution timer")
+
         # get list of pdfs to process
         pdf_input_list = self._get_input_pdfs()
 
         # get list of search items
         search_items = self._get_search_items()
+        execution_time = time.time() - start_time
+        logging.info(f"Search items extracted; execution time was: {datetime.timedelta(seconds=execution_time)}")
 
         # process each input pdf
         for pdf in pdf_input_list:
@@ -48,16 +56,23 @@ class SearchAndSplit:
             # search for item locations within the pdf
             nf_search_items = self._get_search_hits(pdf, nf_search_items)
 
+            execution_time = time.time() - start_time
+            logging.info(f"Search items found; execution time was: {datetime.timedelta(seconds=execution_time)}")
+
             # split pdf based on tag locations
             self._split_pdf(nf_search_items, pdf)
 
-            logging.info(f"Done processing {pdf.name}")
+            execution_time = time.time() - start_time
+            logging.info(f"Done processing {pdf.name}; execution time was: {datetime.timedelta(seconds=execution_time)}")
 
             # update tag hits
             search_items.update(nf_search_items)
 
         # dump tag hits
         self.dump_dataframe(search_items)
+
+        execution_time = time.time() - start_time
+        logging.info(f"Search and Split complete; execution time was: {datetime.timedelta(seconds=execution_time)}")
 
     def _get_input_pdfs(self):
         """
@@ -173,9 +188,9 @@ class SearchAndSplit:
 
             # generate output's file name
             if self.search_type == 'calibration':
-                file_name = search_hits.at[item_idx, 'Tag No']
+                file_name = f"Calibration Certificate - {search_hits.at[item_idx, 'Tag No']}"
             else:
-                file_name = search_hits.at[item_idx, 'Model']
+                file_name = f"ATEX Certificate - {search_hits.at[item_idx, 'Model']}"
             output_name = self.output_folder / f'{file_name}.pdf'
 
             # extract all pages in page range
@@ -187,7 +202,7 @@ class SearchAndSplit:
             with open(output_name, 'wb') as output_file:
                 pdf_writer.write(output_file)
 
-            logging.info(f"Generated PDF for \n{search_hits.iloc[item_idx]}\n at {output_name.name}")
+            logging.info(f"Generated {output_name.name} for item \n{search_hits.iloc[item_idx]}")
 
     def dump_dataframe(self, dataframe):
         """
@@ -210,5 +225,5 @@ if __name__ == '__main__':
     output_folder_path = r"output/"
 
     # run search and split
-    calibration_sas = SearchAndSplit('calibration', input_folder_path, output_folder_path)
+    calibration_sas = SearchAndSplit('atex', input_folder_path, output_folder_path)
     calibration_sas.search_and_split()
