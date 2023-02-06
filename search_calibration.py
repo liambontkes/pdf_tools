@@ -16,7 +16,7 @@ def get_tag_list(input_folder):
     search_excel = sorted(pathlib.Path(input_folder).glob('*.xlsx'))[0]
 
     # extract list of tags from Excel file
-    search_hits = pandas.read_excel(search_excel, sheet_name='Instrument Index', usecols=['Tag No'])
+    search_hits = pandas.read_excel(search_excel, sheet_name='Instrument Index', usecols=['Tag No', 'Supplied By'])
 
     logging.info(f'Extracted tag list, found {len(search_hits)} tags')
 

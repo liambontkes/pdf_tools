@@ -10,6 +10,7 @@ import logging
 import pathlib
 import time
 
+import pandas
 import pypdf
 
 import constants
@@ -18,18 +19,12 @@ import search_model
 
 
 class SearchAndSplit:
-    def __init__(self, search_type, input_path, output_path):
+    def __init__(self, search_type, input_path, output_path, supplier_name):
         self.start_time = None
         self.search_type = search_type
         self.input_folder = pathlib.Path(input_path)
         self.output_folder = pathlib.Path(output_path)
-
-        # create input and output folders
-        self.input_folder.mkdir(parents=True, exist_ok=True)
-        logging.info(f'Created input folder {self.input_folder.name}')
-
-        self.output_folder.mkdir(parents=True, exist_ok=True)
-        logging.info(f'Created output folder {self.output_folder.name}')
+        self.supplier = supplier_name
 
     def search_and_split(self):
         """
@@ -58,14 +53,19 @@ class SearchAndSplit:
             logging.info(f"Done searching {pdf.name}; execution time was: {self._get_execution_time()}")
 
             # split pdf based on tag locations
-            self._split_pdf(nf_search_items, pdf)
+            nf_search_items = self._split_pdf(nf_search_items, pdf)
 
             logging.info(f"Done processing {pdf.name}; execution time was: {self._get_execution_time()}")
-            logging.info(f"{idx / len(pdf_input_list) * 100.0}% of PDFs processed, "
-                         f"estimated time remaining: {self._get_execution_time() * (len(pdf_input_list) - idx)}")
+
+            execution_pct = (idx + 1) / len(pdf_input_list) * 100.0
+            time_remaining = self._get_execution_time() * (len(pdf_input_list) - (idx + 1))
+            logging.info(f"{execution_pct}% of PDFs processed, estimated time remaining: {time_remaining}")
 
             # update tag hits
+            logging.debug(f"Search Items:\n{search_items['Destination']}")
+            logging.debug(f"NF Search Items: \n{nf_search_items}")
             search_items.update(nf_search_items)
+            logging.debug(f"Updated search items: \n{search_items}")
 
         # dump tag hits
         self._dump_dataframe(search_items)
@@ -90,12 +90,24 @@ class SearchAndSplit:
         Gets a list of items to search for from the input folder.
         :return: a list of search items
         """
-        if self.search_type == 'calibration':
-            search_items = search_calibration.get_tag_list(self.input_folder)
-        else:
-            search_items = search_model.get_model_list(self.input_folder)
+        # select first Excel file found in input folder
+        search_excel = sorted(pathlib.Path(self.input_folder).glob('*.xlsx'))[0]
 
-        # add columns to search_hits
+        # extract list of tags from Excel file
+        search_items = pandas.read_excel(search_excel,
+                                         sheet_name='Instrument Index',
+                                         usecols=constants.EXCEL_COLUMNS[self.search_type])
+
+        # limit search to supplier
+        search_items = search_items[search_items['Supplied By'] == self.supplier]
+        logging.info(f"Limited search to {self.supplier}, number of items to search for is now {len(search_items)}")
+
+        # clean search items
+        search_items = search_items.dropna().reset_index(drop=True)
+        search_items['Tag No'] = search_items['Tag No'].replace(to_replace='-', value='_', regex=True)
+        logging.debug(f"Cleaned tag list: \n{search_items}")
+
+        # add columns to search_items
         search_items['Page'] = constants.NOT_FOUND
         search_items['Source'] = ''
         search_items['Destination'] = ''
@@ -105,14 +117,7 @@ class SearchAndSplit:
     def _filter_search_items(self, search_items):
         # only search for items that have not been found
         filtered_items = search_items.loc[search_items['Page'] == constants.NOT_FOUND]
-
         return filtered_items
-
-        # # context dependent filtering
-        # if self.search_type == 'calibration':
-        #     return search_calibration.filter_tags(filtered_items)
-        # else:
-        #     return search_models.filter_models(filtered_items)
 
     def _get_search_hits(self, pdf_source, nf_search_items):
         """
@@ -136,62 +141,60 @@ class SearchAndSplit:
 
         return nf_search_items
 
-    def _split_pdf(self, search_hits, pdf_source):
+    def _split_pdf(self, search_items, pdf_source):
         """
         Creates a new file for each tag in tag hits, composed of the relevant pages from the pdf source.
-        :param search_hits: the dataframe of search items and the first page they are found in pdf source
+        :param search_items: the dataframe of search items and the first page they are found in pdf source
         :param pdf_source: the pdf source document
         """
         # sort tag hits by page number
-        search_hits = search_hits.sort_values(by='Page').reset_index(drop=True)
-        logging.debug(f"Search items to split from source pdf:\n{search_hits}")
+        search_items = search_items.sort_values(by='Page').reset_index(drop=True)
+        logging.debug(f"Search items to split from source pdf:\n{search_items}")
 
         # create pdf reader
         pdf_reader = pypdf.PdfReader(pdf_source)
 
         # iterate through each tag in tag hits
-        for item_idx, hit in search_hits.iterrows():
+        for idx, row in search_items.iterrows():
 
             # set idx for next tag in list
-            next_item_idx = item_idx + 1
+            next_idx = idx + 1
 
             # find the first and last page related to the tag
             page_range = {
-                'first': search_hits.at[item_idx, 'Page']
+                'first': search_items.at[idx, 'Page']
             }
-
-            # catch key out-of-bounds
-            try:
-                page_range['last'] = search_hits.at[next_item_idx, 'Page']
-            except KeyError as error:
-                logging.info(f"Reached last tag, setting page range to end of PDF")
-                logging.debug(f"KeyError: {error}")
-
-                page_range['last'] = len(pdf_reader.pages)
 
             # catch tags which were not found
             if page_range['first'] == constants.NOT_FOUND:
-                logging.info(f"{search_hits.iloc[item_idx]} not found in {pdf_source.stem}, skipping split...")
+                logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf_source.name}, skipping split...")
 
                 # log tag as not found
-                search_hits.at[item_idx, 'Source'] = 'N/F'
-                search_hits.at[item_idx, 'Destination'] = 'N/F'
+                search_items.at[idx, 'Destination'] = 'N/F'
+
+                logging.debug(search_items.at[idx, 'Destination'])
 
                 # skip this tag
                 continue
 
+            # catch key out-of-bounds
+            try:
+                page_range['last'] = search_items.at[next_idx, 'Page']
+            except KeyError as error:
+                logging.info(f"Reached last tag, setting page range to end of PDF")
+                page_range['last'] = len(pdf_reader.pages)
+
             # catch multiple tags being found on the same page
             # catch next tag not being found
-            while page_range['first'] >= page_range['last'] or page_range['last'] == constants.NOT_FOUND and page_range[
-                'last'] <= len(
-                pdf_reader.pages):
+            while page_range['first'] >= page_range['last'] or page_range['last'] == constants.NOT_FOUND \
+                    and page_range['last'] <= len(pdf_reader.pages):
 
                 # increment next tag index
-                next_item_idx = next_item_idx + 1
+                next_idx = next_idx + 1
 
                 # update page range
                 try:
-                    page_range['last'] = search_hits.at[next_item_idx, 'Page']
+                    page_range['last'] = search_items.at[next_idx, 'Page']
 
                 # if index is out-of-bounds, set last page to end of pdf
                 except KeyError:
@@ -199,25 +202,28 @@ class SearchAndSplit:
                     page_range['last'] = len(pdf_reader.pages)
 
             # generate output's file name
-            if self.search_type == 'calibration':
-                file_name = f"Calibration Certificate - {search_hits.at[item_idx, 'Tag No']}"
+            if self.search_type == constants.CALIBRATION:
+                file_name = f"Calibration Certificate - {search_items.at[idx, 'Tag No']}"
             else:
-                file_name = f"ATEX Certificate - {search_hits.at[item_idx, 'Model']}"
+                file_name = f"ATEX Certificate - {search_items.at[idx, 'Model']}"
             output_name = self.output_folder / f'{file_name}.pdf'
 
             # save output file name
-            search_hits.at[item_idx, 'Destination'] = file_name
+            search_items.at[idx, 'Destination'] = file_name
 
             # extract all pages in page range
             pdf_writer = pypdf.PdfWriter()
-            for page_number in range(page_range['first'], page_range['last']):
+            for page_number in range(int(page_range['first']), int(page_range['last'])):
                 pdf_writer.add_page(pdf_reader.pages[page_number])
 
             # write file to disk
             with open(output_name, 'wb') as output_file:
                 pdf_writer.write(output_file)
 
-            logging.info(f"Generated {output_name.name} for item \n{search_hits.iloc[item_idx]}")
+            logging.info(f"Generated {output_name.name} for item")
+            logging.debug(search_items.iloc[idx])
+
+        return search_items
 
     def _dump_dataframe(self, dataframe):
         """
@@ -251,7 +257,7 @@ if __name__ == '__main__':
 
     # select document type to process
     doc_type = input("What is the document type you want to process? "
-                     "Options are 'atex', 'calibration', 'sort': ")
+                     f"Options are '{constants.ATEX}', '{constants.CALIBRATION}', '{constants.SORT}': ")
     if doc_type == constants.ATEX or doc_type == 'a':
         doc_type = constants.ATEX
     elif doc_type == constants.CALIBRATION or doc_type == 'c':
@@ -263,10 +269,10 @@ if __name__ == '__main__':
         exit()
 
     # set input and output folder
-    input_folder_path = batch_path / "input"
-    output_folder_path = batch_path / f"output_{doc_type}"
+    input_folder_path = batch_path / doc_type / "input"
+    output_folder_path = batch_path / doc_type / "output"
     output_folder_path.mkdir(parents=True, exist_ok=True)
 
     # run search and split
-    calibration_sas = SearchAndSplit(doc_type, input_folder_path, output_folder_path)
-    calibration_sas.search_and_split()
+    sas = SearchAndSplit(doc_type, input_folder_path, output_folder_path, supplier)
+    sas.search_and_split()

@@ -17,9 +17,9 @@ def get_model_list(input_folder):
     search_excel = sorted(pathlib.Path(input_folder).glob('*.xlsx'))[0]
 
     # extract list of tags from Excel file
-    search_hits = pandas.read_excel(search_excel, sheet_name='Instrument Index', usecols=['Tag No', 'Model'])
+    search_hits = pandas.read_excel(search_excel, sheet_name='Instrument Index', usecols=['Tag No', 'Model', 'Supplied By'])
 
-    logging.info(f'Extracted tag list, found {len(search_hits)} tags')
+    logging.info(f'Extracted item list, found {len(search_hits)} tags')
 
     # clean search items
     search_hits = search_hits.dropna()
