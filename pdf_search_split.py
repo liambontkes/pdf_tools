@@ -4,22 +4,22 @@
 # Description: Parses the Excel doc for a list of tags to search for in the PDF doc.
 # It will then extract the relevant pages from the PDF doc and rename them according
 # to their tag.
+import datetime
 import functools
 import logging
 import pathlib
-import re
-import datetime
 import time
 
 import pypdf
 
-import search_calibration
 import constants
+import search_calibration
 import search_model
 
 
 class SearchAndSplit:
     def __init__(self, search_type, input_path, output_path):
+        self.start_time = None
         self.search_type = search_type
         self.input_folder = pathlib.Path(input_path)
         self.output_folder = pathlib.Path(output_path)
@@ -37,7 +37,7 @@ class SearchAndSplit:
         When found, extracts all tagged pages and saves them to the output folder.
         """
         # start timer
-        start_time = time.time()
+        self.start_time = time.time()
         logging.info(f"Starting execution timer")
 
         # get list of pdfs to process
@@ -45,34 +45,32 @@ class SearchAndSplit:
 
         # get list of search items
         search_items = self._get_search_items()
-        execution_time = time.time() - start_time
-        logging.info(f"Search items extracted; execution time was: {datetime.timedelta(seconds=execution_time)}")
+        logging.info(f"Search items extracted; execution time was: {self._get_execution_time()}")
 
         # process each input pdf
-        for pdf in pdf_input_list:
+        for idx, pdf in enumerate(pdf_input_list):
             # filter out items
             nf_search_items = self._filter_search_items(search_items)
 
             # search for item locations within the pdf
             nf_search_items = self._get_search_hits(pdf, nf_search_items)
 
-            execution_time = time.time() - start_time
-            logging.info(f"Search items found; execution time was: {datetime.timedelta(seconds=execution_time)}")
+            logging.info(f"Done searching {pdf.name}; execution time was: {self._get_execution_time()}")
 
             # split pdf based on tag locations
             self._split_pdf(nf_search_items, pdf)
 
-            execution_time = time.time() - start_time
-            logging.info(f"Done processing {pdf.name}; execution time was: {datetime.timedelta(seconds=execution_time)}")
+            logging.info(f"Done processing {pdf.name}; execution time was: {self._get_execution_time()}")
+            logging.info(f"{idx / len(pdf_input_list) * 100.0}% of PDFs processed, "
+                         f"estimated time remaining: {self._get_execution_time() * (len(pdf_input_list) - idx)}")
 
             # update tag hits
             search_items.update(nf_search_items)
 
         # dump tag hits
-        self.dump_dataframe(search_items)
+        self._dump_dataframe(search_items)
 
-        execution_time = time.time() - start_time
-        logging.info(f"Search and Split complete; execution time was: {datetime.timedelta(seconds=execution_time)}")
+        logging.info(f"Search and Split complete; execution time was: {self._get_execution_time()}")
 
     def _get_input_pdfs(self):
         """
@@ -177,7 +175,7 @@ class SearchAndSplit:
 
                 # log tag as not found
                 search_hits.at[item_idx, 'Source'] = 'N/F'
-                search_hits.at[item_idx, 'Destination'] = 'N/A'
+                search_hits.at[item_idx, 'Destination'] = 'N/F'
 
                 # skip this tag
                 continue
@@ -186,7 +184,7 @@ class SearchAndSplit:
             # catch next tag not being found
             while page_range['first'] >= page_range['last'] or page_range['last'] == constants.NOT_FOUND and page_range[
                 'last'] <= len(
-                    pdf_reader.pages):
+                pdf_reader.pages):
 
                 # increment next tag index
                 next_item_idx = next_item_idx + 1
@@ -221,7 +219,7 @@ class SearchAndSplit:
 
             logging.info(f"Generated {output_name.name} for item \n{search_hits.iloc[item_idx]}")
 
-    def dump_dataframe(self, dataframe):
+    def _dump_dataframe(self, dataframe):
         """
         Dumps the generated dataframe to an Excel document in the output folder.
         :param dataframe:
@@ -232,15 +230,43 @@ class SearchAndSplit:
         # dump dataframe to xlsx
         dataframe.to_excel(output_name, sheet_name='Instrument Index')
 
+    def _get_execution_time(self):
+        execution_time = time.time() - self.start_time
+        return datetime.timedelta(seconds=execution_time)
+
 
 if __name__ == '__main__':
     # set log level
     logging.basicConfig(level=logging.DEBUG)
 
-    # input/output folders
-    input_folder_path = r"input/"
-    output_folder_path = r"output/"
+    # find batch to process
+    supplier = input("Which supplier would you like to process?: ")
+    batch_root = pathlib.Path(constants.BATCH_ROOT)
+    if len(sorted(batch_root.glob(supplier))) != 0:
+        print(f"Found batch for supplier {supplier}.")
+        batch_path = sorted(batch_root.glob(supplier))[0]
+    else:
+        print(f"No batch found for supplier {supplier}. Create one using create_batch.")
+        exit()
+
+    # select document type to process
+    doc_type = input("What is the document type you want to process? "
+                     "Options are 'atex', 'calibration', 'sort': ")
+    if doc_type == constants.ATEX or doc_type == 'a':
+        doc_type = constants.ATEX
+    elif doc_type == constants.CALIBRATION or doc_type == 'c':
+        doc_type = constants.CALIBRATION
+    elif doc_type == constants.SORT or doc_type == 's':
+        doc_type = constants.SORT
+    else:
+        print(f"Document type {doc_type} not recognized.")
+        exit()
+
+    # set input and output folder
+    input_folder_path = batch_path / "input"
+    output_folder_path = batch_path / f"output_{doc_type}"
+    output_folder_path.mkdir(parents=True, exist_ok=True)
 
     # run search and split
-    calibration_sas = SearchAndSplit('atex', input_folder_path, output_folder_path)
+    calibration_sas = SearchAndSplit(doc_type, input_folder_path, output_folder_path)
     calibration_sas.search_and_split()
