@@ -27,20 +27,20 @@ def get_model_list(input_folder):
 
     logging.debug(f"Cleaned tag list: \n{search_hits}")
 
-    # add columns to search_hits
-    search_hits['Page'] = constants.NOT_FOUND
-    search_hits['Source'] = ''
-
     return search_hits
 
 
-def search_for_models(pdf_reader, search_item):
+def search_for_model(pdf_reader, search_item):
     """
     Searches through the PDF for the first hit of the item.
     :param search_item: the search item to operate on
     :param pdf_reader: the pdf to search in
     :return: the page number where the item is found
     """
+    # don't search for undetermined models
+    if search_item['Model'] == 'TBD':
+        return search_item
+
     # search through each page of the pdf
     for page_number, page in enumerate(pdf_reader.pages):
 
@@ -58,5 +58,5 @@ def search_for_models(pdf_reader, search_item):
     return search_item
 
 
-def filter_models(filtered_items):
-    return filtered_items
+def filter_models(search_item):
+    return search_item

@@ -15,7 +15,7 @@ import pypdf
 
 import search_calibration
 import constants
-import search_models
+import search_model
 
 
 class SearchAndSplit:
@@ -93,19 +93,28 @@ class SearchAndSplit:
         :return: a list of search items
         """
         if self.search_type == 'calibration':
-            return search_calibration.get_tag_list(self.input_folder)
+            search_items = search_calibration.get_tag_list(self.input_folder)
         else:
-            return search_models.get_model_list(self.input_folder)
+            search_items = search_model.get_model_list(self.input_folder)
+
+        # add columns to search_hits
+        search_items['Page'] = constants.NOT_FOUND
+        search_items['Source'] = ''
+        search_items['Destination'] = ''
+
+        return search_items
 
     def _filter_search_items(self, search_items):
         # only search for items that have not been found
         filtered_items = search_items.loc[search_items['Page'] == constants.NOT_FOUND]
 
-        # context dependent filtering
-        if self.search_type == 'calibration':
-            return search_calibration.filter_tags(filtered_items)
-        else:
-            return search_models.filter_models(filtered_items)
+        return filtered_items
+
+        # # context dependent filtering
+        # if self.search_type == 'calibration':
+        #     return search_calibration.filter_tags(filtered_items)
+        # else:
+        #     return search_models.filter_models(filtered_items)
 
     def _get_search_hits(self, pdf_source, nf_search_items):
         """
@@ -120,7 +129,7 @@ class SearchAndSplit:
         if self.search_type == 'calibration':
             search_pdf_partial = functools.partial(search_calibration.search_for_tag, pdf_reader)
         else:
-            search_pdf_partial = functools.partial(search_models.search_for_models, pdf_reader)
+            search_pdf_partial = functools.partial(search_model.search_for_model, pdf_reader)
 
         nf_search_items = nf_search_items.apply(search_pdf_partial, axis=1)
 
@@ -165,6 +174,11 @@ class SearchAndSplit:
             # catch tags which were not found
             if page_range['first'] == constants.NOT_FOUND:
                 logging.info(f"{search_hits.iloc[item_idx]} not found in {pdf_source.stem}, skipping split...")
+
+                # log tag as not found
+                search_hits.at[item_idx, 'Source'] = 'N/F'
+                search_hits.at[item_idx, 'Destination'] = 'N/A'
+
                 # skip this tag
                 continue
 
@@ -193,6 +207,9 @@ class SearchAndSplit:
                 file_name = f"ATEX Certificate - {search_hits.at[item_idx, 'Model']}"
             output_name = self.output_folder / f'{file_name}.pdf'
 
+            # save output file name
+            search_hits.at[item_idx, 'Destination'] = file_name
+
             # extract all pages in page range
             pdf_writer = pypdf.PdfWriter()
             for page_number in range(page_range['first'], page_range['last']):
@@ -210,7 +227,7 @@ class SearchAndSplit:
         :param dataframe:
         """
         # create output file name
-        output_name = self.output_folder / "search_split_results.xlsx"
+        output_name = self.output_folder / f"{self.search_type}_search_split_results.xlsx"
 
         # dump dataframe to xlsx
         dataframe.to_excel(output_name, sheet_name='Instrument Index')

@@ -26,10 +26,6 @@ def get_tag_list(input_folder):
 
     logging.debug(f"Cleaned tag list: \n{search_hits}")
 
-    # add columns to search_hits
-    search_hits['Page'] = constants.NOT_FOUND
-    search_hits['Source'] = ''
-
     return search_hits
 
 
@@ -67,17 +63,16 @@ def search_for_tag(pdf_reader, search_item):
     return search_item
 
 
-def filter_tags(search_item):
+def filter_tags(search_items):
     # make Tag No searchable
-    tag_sections = search_item['Tag No'].split(".")
-    tag_search = f"{tag_sections[-2]}.{tag_sections[-1]}"
+    tag_id = search_items['Tag No'].split(".")[-1]
 
     # only search for tags with 'T' or 'I'
     matches = ['T', 'I', 'E']
-    if not any([x in tag_sections[-1] for x in matches]):
-        logging.info(f"Tag {search_item['Tag No']} is not type 'Indicator' or 'Transmitter', skipping search...")
-        return search_item
-    return search_item
+    if not any([x in tag_id for x in matches]):
+        logging.info(f"Tag {search_items['Tag No']} is not type 'Indicator' or 'Transmitter', skipping search...")
+        return search_items
+    return search_items
 
 
 def get_tag_name(tag):
