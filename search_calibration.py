@@ -53,7 +53,7 @@ def search_for_tag(pdf_reader, search_item):
         page_text = page.extract_text()
 
         # if found, save page number where text is found
-        if re.search(tag_search, page_text):
+        if tag_search in page_text:
             logging.debug(f"'{search_item['Tag No']}' found on page {page_number}")
             search_item['Page'] = page_number
             return search_item

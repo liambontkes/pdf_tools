@@ -12,6 +12,7 @@ import time
 
 import pandas
 import pypdf
+import slugify
 
 import constants
 import search_calibration
@@ -103,8 +104,9 @@ class SearchAndSplit:
         logging.info(f"Limited search to {self.supplier}, number of items to search for is now {len(search_items)}")
 
         # clean search items
-        search_items = search_items.dropna().reset_index(drop=True)
         search_items['Tag No'] = search_items['Tag No'].replace(to_replace='-', value='_', regex=True)
+        search_items = search_items.dropna()
+        search_items['Model'] = search_items['Model'].astype('string')
         logging.debug(f"Cleaned tag list: \n{search_items}")
 
         # add columns to search_items
@@ -114,7 +116,11 @@ class SearchAndSplit:
 
         return search_items
 
-    def _filter_search_items(self, search_items):
+    @staticmethod
+    def _filter_search_items(search_items):
+        # drop cells without tag numbers
+        filtered_items = search_items.dropna(subset=['Tag No'])
+
         # only search for items that have not been found
         filtered_items = search_items.loc[search_items['Page'] == constants.NOT_FOUND]
         return filtered_items
@@ -203,9 +209,11 @@ class SearchAndSplit:
 
             # generate output's file name
             if self.search_type == constants.CALIBRATION:
-                file_name = f"Calibration Certificate - {search_items.at[idx, 'Tag No']}"
+                tag = slugify.slugify(search_items.at[idx, 'Tag No'], separator="_", lowercase=False)
+                file_name = f"Calibration Certificate - {tag}"
             else:
-                file_name = f"ATEX Certificate - {search_items.at[idx, 'Model']}"
+                model = slugify.slugify(search_items.at[idx, 'Model'], separator="_", lowercase=False)
+                file_name = f"ATEX Certificate - {model}"
             output_name = self.output_folder / f'{file_name}.pdf'
 
             # save output file name
@@ -217,8 +225,11 @@ class SearchAndSplit:
                 pdf_writer.add_page(pdf_reader.pages[page_number])
 
             # write file to disk
-            with open(output_name, 'wb') as output_file:
-                pdf_writer.write(output_file)
+            try:
+                with open(output_name, 'wb') as output_file:
+                    pdf_writer.write(output_file)
+            except OSError as error:
+                logging.error(f"Unable to write to file.\n{error}")
 
             logging.info(f"Generated {output_name.name} for item")
             logging.debug(search_items.iloc[idx])

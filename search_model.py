@@ -37,9 +37,24 @@ def search_for_model(pdf_reader, search_item):
     :param pdf_reader: the pdf to search in
     :return: the page number where the item is found
     """
+    search_list = []
+
     # don't search for undetermined models
-    if search_item['Model'] == 'TBD':
+    if search_item['Model'].find('TBD') != -1:
         return search_item
+
+    # handle combined model numbers
+    if search_item['Model'].find(' / ') != -1:
+        linked_models = search_item['Model'].split(' / ')
+        search_list.extend(linked_models)
+    else:
+        search_list.append(search_item['Model'])
+
+    # remove whitespace
+    for text in search_list:
+        text.strip()
+
+    logging.debug(f"Cleaned search text: {search_list}")
 
     # search through each page of the pdf
     for page_number, page in enumerate(pdf_reader.pages):
@@ -48,10 +63,11 @@ def search_for_model(pdf_reader, search_item):
         page_text = page.extract_text()
 
         # if found, save page number where text is found
-        if re.search(search_item['Model'], page_text):
-            logging.debug(f"'{search_item['Model']}' found on page {page_number}")
-            search_item['Page'] = page_number
-            return search_item
+        for text in search_list:
+            if text in page_text:
+                logging.debug(f"'{text}' found on page {page_number}")
+                search_item['Page'] = page_number
+                return search_item
 
     # if not found, return
     logging.debug(f"'{search_item['Model']}' not found")
