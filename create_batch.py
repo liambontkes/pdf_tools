@@ -6,15 +6,15 @@ if __name__ == "__main__":
     supplier = input("What is the supplier code?: ")
 
     # create path to batch root
-    root = pathlib.Path(constants.BATCH_ROOT)
+    root = pathlib.Path(constants.batch_root)
 
     # path to input Excel file
     excel = pathlib.Path(r'C:\Users\BONT17424\PycharmProjects\pdf_search_split\misc\H363404-00000-270-216-0001, 0002 & 0003-MstrRedline.xlsx')
 
     doc_types = [
-        constants.ATEX,
-        constants.CALIBRATION,
-        constants.SORT
+        constants.atex,
+        constants.calibration,
+        constants.sort
     ]
 
     folder_names = [

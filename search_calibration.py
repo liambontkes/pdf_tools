@@ -87,7 +87,7 @@ def get_tag_name(tag):
     tag_id = tag_sections[-1]
 
     # remove 'connected to' component of tag id
-    if tag_id.find('_') != constants.NOT_FOUND:
+    if tag_id.find('_') != constants.not_found:
         tag_id = tag_sections[-1].split("_")[-1]
 
     # create tag name from area and id components

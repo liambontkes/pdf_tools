@@ -97,7 +97,7 @@ class SearchAndSplit:
         # extract list of tags from Excel file
         search_items = pandas.read_excel(search_excel,
                                          sheet_name='Instrument Index',
-                                         usecols=constants.EXCEL_COLUMNS[self.search_type])
+                                         usecols=constants.df_columns[self.search_type])
 
         # limit search to supplier
         search_items = search_items[search_items['Supplied By'] == self.supplier]
@@ -110,7 +110,7 @@ class SearchAndSplit:
         logging.debug(f"Cleaned tag list: \n{search_items}")
 
         # add columns to search_items
-        search_items['Page'] = constants.NOT_FOUND
+        search_items['Page'] = constants.not_found
         search_items['Source'] = ''
         search_items['Destination'] = ''
 
@@ -122,7 +122,7 @@ class SearchAndSplit:
         filtered_items = search_items.dropna(subset=['Tag No'])
 
         # only search for items that have not been found
-        filtered_items = search_items.loc[search_items['Page'] == constants.NOT_FOUND]
+        filtered_items = search_items.loc[search_items['Page'] == constants.not_found]
         return filtered_items
 
     def _get_search_hits(self, pdf_source, nf_search_items):
@@ -172,7 +172,7 @@ class SearchAndSplit:
             }
 
             # catch tags which were not found
-            if page_range['first'] == constants.NOT_FOUND:
+            if page_range['first'] == constants.not_found:
                 logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf_source.name}, skipping split...")
 
                 # log tag as not found
@@ -192,7 +192,7 @@ class SearchAndSplit:
 
             # catch multiple tags being found on the same page
             # catch next tag not being found
-            while page_range['first'] >= page_range['last'] or page_range['last'] == constants.NOT_FOUND \
+            while page_range['first'] >= page_range['last'] or page_range['last'] == constants.not_found \
                     and page_range['last'] <= len(pdf_reader.pages):
 
                 # increment next tag index
@@ -208,7 +208,7 @@ class SearchAndSplit:
                     page_range['last'] = len(pdf_reader.pages)
 
             # generate output's file name
-            if self.search_type == constants.CALIBRATION:
+            if self.search_type == constants.calibration:
                 tag = slugify.slugify(search_items.at[idx, 'Tag No'], separator="_", lowercase=False)
                 file_name = f"Calibration Certificate - {tag}"
             else:
@@ -258,7 +258,7 @@ if __name__ == '__main__':
 
     # find batch to process
     supplier = input("Which supplier would you like to process?: ")
-    batch_root = pathlib.Path(constants.BATCH_ROOT)
+    batch_root = pathlib.Path(constants.batch_root)
     if len(sorted(batch_root.glob(supplier))) != 0:
         print(f"Found batch for supplier {supplier}.")
         batch_path = sorted(batch_root.glob(supplier))[0]
@@ -268,13 +268,13 @@ if __name__ == '__main__':
 
     # select document type to process
     doc_type = input("What is the document type you want to process? "
-                     f"Options are '{constants.ATEX}', '{constants.CALIBRATION}', '{constants.SORT}': ")
-    if doc_type == constants.ATEX or doc_type == 'a':
-        doc_type = constants.ATEX
-    elif doc_type == constants.CALIBRATION or doc_type == 'c':
-        doc_type = constants.CALIBRATION
-    elif doc_type == constants.SORT or doc_type == 's':
-        doc_type = constants.SORT
+                     f"Options are '{constants.atex}', '{constants.calibration}', '{constants.sort}': ")
+    if doc_type == constants.atex or doc_type == 'a':
+        doc_type = constants.atex
+    elif doc_type == constants.calibration or doc_type == 'c':
+        doc_type = constants.calibration
+    elif doc_type == constants.sort or doc_type == 's':
+        doc_type = constants.sort
     else:
         print(f"Document type {doc_type} not recognized.")
         exit()
