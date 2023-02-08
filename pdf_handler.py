@@ -11,6 +11,18 @@ class PdfHandler:
         self.source = pathlib.Path(source)
         self.reader = pypdf.PdfReader(self.source)
 
+    def search_list(self, ls_text):
+        # search for all each element in list
+        for text in ls_text:
+            page_number = self.search(text)
+
+            # if text is found, return page number
+            if page_number != constants.not_found:
+                return page_number
+
+        # if none of the list elements are found, return not found
+        return constants.not_found
+
     def search(self, text):
         # search through pdf by page
         for page_number, page in enumerate(self.reader.pages):
@@ -45,3 +57,22 @@ class PdfHandler:
         except OSError as error:
             logging.error(f"{error}. Unable to write {filename.name} to file.")
             return False
+
+    @property
+    def name(self):
+        return self.source.stem
+
+
+def get_pdfs(directory):
+    # search directory for pdfs
+    ls_pdf = sorted(pathlib.Path(directory).glob('*.pdf'))
+
+    logging.info(f"Found {len(ls_pdf)} PDFs to process in {directory.name}")
+    logging.debug(f"PDFs in {directory.name}: {ls_pdf}")
+
+    # instantiate pdf handlers
+    pdfs = []
+    for pdf in ls_pdf:
+        pdfs.append(PdfHandler(pdf))
+
+    return pdfs

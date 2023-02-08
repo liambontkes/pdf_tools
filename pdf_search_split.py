@@ -15,8 +15,9 @@ import pypdf
 import slugify
 
 import constants
-import search_calibration
-import search_model
+import calibration
+import atex
+import pdf_handler
 
 
 class SearchAndSplit:
@@ -37,29 +38,27 @@ class SearchAndSplit:
         logging.info(f"Starting execution timer")
 
         # get list of pdfs to process
-        pdf_input_list = self._get_input_pdfs()
+        ls_pdf = pdf_handler.get_pdfs(self.input_folder)
 
         # get list of search items
         search_items = self._get_search_items()
         logging.info(f"Search items extracted; execution time was: {self._get_execution_time()}")
 
         # process each input pdf
-        for idx, pdf in enumerate(pdf_input_list):
+        for idx, pdf in enumerate(ls_pdf):
             # filter out items
             nf_search_items = self._filter_search_items(search_items)
 
             # search for item locations within the pdf
-            nf_search_items = self._get_search_hits(pdf, nf_search_items)
-
+            nf_search_items = self._search_for_items(pdf, nf_search_items)
             logging.info(f"Done searching {pdf.name}; execution time was: {self._get_execution_time()}")
 
             # split pdf based on tag locations
             nf_search_items = self._split_pdf(nf_search_items, pdf)
-
             logging.info(f"Done processing {pdf.name}; execution time was: {self._get_execution_time()}")
 
-            execution_pct = (idx + 1) / len(pdf_input_list) * 100.0
-            time_remaining = self._get_execution_time() * (len(pdf_input_list) - (idx + 1))
+            execution_pct = (idx + 1) / len(ls_pdf) * 100.0
+            time_remaining = self._get_execution_time() * (len(ls_pdf) - (idx + 1))
             logging.info(f"{execution_pct}% of PDFs processed, estimated time remaining: {time_remaining}")
 
             # update tag hits
@@ -73,86 +72,69 @@ class SearchAndSplit:
 
         logging.info(f"Search and Split complete; execution time was: {self._get_execution_time()}")
 
-    def _get_input_pdfs(self):
-        """
-        Generates a list of PDFs to search.
-        :return: a list of paths
-        """
-        pdf_list = sorted(pathlib.Path(self.input_folder).glob('*.pdf'))
-
-        logging.info(f"Found {len(pdf_list)} PDFs to process in {self.input_folder.name}")
-
-        logging.debug(f"PDF process list: \n{pdf_list}")
-
-        return pdf_list
-
     def _get_search_items(self):
-        """
-        Gets a list of items to search for from the input folder.
-        :return: a list of search items
-        """
         # select first Excel file found in input folder
         search_excel = sorted(pathlib.Path(self.input_folder).glob('*.xlsx'))[0]
 
         # extract list of tags from Excel file
         search_items = pandas.read_excel(search_excel,
                                          sheet_name='Instrument Index',
-                                         usecols=constants.df_columns[self.search_type])
+                                         usecols=['Tag No', 'Supplied By', 'Model'])
 
         # limit search to supplier
         search_items = search_items[search_items['Supplied By'] == self.supplier]
         logging.info(f"Limited search to {self.supplier}, number of items to search for is now {len(search_items)}")
 
         # clean search items
+        # drop cells without tag numbers
+        search_items = search_items.dropna(subset=['Tag No'])
+
+        # fix tag notation
         search_items['Tag No'] = search_items['Tag No'].replace(to_replace='-', value='_', regex=True)
-        search_items = search_items.dropna()
+
+        # interpret all Models as strings
         search_items['Model'] = search_items['Model'].astype('string')
+
         logging.debug(f"Cleaned tag list: \n{search_items}")
 
         # add columns to search_items
+        search_items['Search'] = ''
         search_items['Page'] = constants.not_found
         search_items['Source'] = ''
         search_items['Destination'] = ''
 
+        # get search text for each item
+        search_items = self._create_search(search_items)
+
+        return search_items
+
+    def _create_search(self, search_items):
+        if self.search_type == constants.calibration:
+            search_items['Search'] = search_items.apply(lambda row: calibration.get_search_strings(row['Tag No']), axis=1)
+        elif self.search_type == constants.atex:
+            search_items['Search'] = search_items.apply(lambda row: atex.get_search_strings(row['Model']), axis=1)
+        else:
+            logging.error(f"Search type {self.search_type} not recognized")
         return search_items
 
     @staticmethod
     def _filter_search_items(search_items):
-        # drop cells without tag numbers
-        filtered_items = search_items.dropna(subset=['Tag No'])
-
         # only search for items that have not been found
         filtered_items = search_items.loc[search_items['Page'] == constants.not_found]
+
         return filtered_items
 
-    def _get_search_hits(self, pdf_source, nf_search_items):
-        """
-        Generates a dataframe of search items and their location in the pdf document.
-        :param nf_search_items: the list of items to search for
-        :param pdf_source: the path to the pdf document to search
-        :return: a dataframe of items and the page number where they are found
-        """
-        # create pdf reader
-        pdf_reader = pypdf.PdfReader(pdf_source)
-
-        if self.search_type == 'calibration':
-            search_pdf_partial = functools.partial(search_calibration.search_for_tag, pdf_reader)
-        else:
-            search_pdf_partial = functools.partial(search_model.search_for_model, pdf_reader)
-
-        nf_search_items = nf_search_items.apply(search_pdf_partial, axis=1)
+    @staticmethod
+    def _search_for_items(pdf, search_items):
+        # search each row in dataframe
+        search_items['Page'] = search_items.apply(lambda row: pdf.search_list(row['Search']), axis=1)
 
         # record source pdf
-        nf_search_items['Source'] = pdf_source.stem
+        search_items['Source'] = pdf.name
 
-        return nf_search_items
+        return search_items
 
     def _split_pdf(self, search_items, pdf_source):
-        """
-        Creates a new file for each tag in tag hits, composed of the relevant pages from the pdf source.
-        :param search_items: the dataframe of search items and the first page they are found in pdf source
-        :param pdf_source: the pdf source document
-        """
         # sort tag hits by page number
         search_items = search_items.sort_values(by='Page').reset_index(drop=True)
         logging.debug(f"Search items to split from source pdf:\n{search_items}")
