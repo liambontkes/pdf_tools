@@ -10,7 +10,7 @@ def get_search_strings(tag):
     ls_search = []
 
     # only search for transmitter and indicator tags
-    if re.search(r"[IT]\d+$", tag):
+    if re.search(r"[IT]\d+\w?", tag):
         logging.debug(f"Tag {tag} is type transmitter or indicator, calibration required")
 
         # only search for last 3 sections of the tag
