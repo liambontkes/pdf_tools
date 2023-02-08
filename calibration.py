@@ -1,6 +1,8 @@
 import logging
 import re
 
+from slugify import slugify
+
 import constants
 
 
@@ -20,3 +22,8 @@ def get_search_strings(tag):
         ls_search.append(constants.not_applicable)
 
     return ls_search
+
+
+def create_file_name(tag):
+    safe_tag = slugify(tag, separator='_', lowercase=False)
+    return f"Calibration Certificate - {safe_tag}"

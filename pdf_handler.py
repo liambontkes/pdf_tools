@@ -38,7 +38,7 @@ class PdfHandler:
         # if not found, return not found
         return constants.not_found
 
-    def split(self, page_range, filename):
+    def split(self, page_range, path):
         # create new writer
         writer = pypdf.PdfWriter()
 
@@ -48,19 +48,23 @@ class PdfHandler:
 
         # write file to disk
         try:
-            with open(filename, 'wb') as output:
+            with open(path, 'wb') as output:
                 writer.write(output)
-            logging.info(f"Wrote {filename.name} to {filename.parent}!")
+            logging.info(f"Wrote {path.name} to {path.parent}!")
             return True
 
         # if an error occurs, return False
         except OSError as error:
-            logging.error(f"{error}. Unable to write {filename.name} to file.")
+            logging.error(f"{error}. Unable to write {path.name} to file.")
             return False
 
     @property
     def name(self):
         return self.source.stem
+
+    @property
+    def number_of_pages(self):
+        return len(self.reader.pages)
 
 
 def get_pdfs(directory):

@@ -57,15 +57,12 @@ class SearchAndSplit:
             nf_search_items = self._split_pdf(nf_search_items, pdf)
             logging.info(f"Done processing {pdf.name}; execution time was: {self._get_execution_time()}")
 
-            execution_pct = (idx + 1) / len(ls_pdf) * 100.0
+            pct_execution = (idx + 1) / len(ls_pdf) * 100.0
             time_remaining = self._get_execution_time() * (len(ls_pdf) - (idx + 1))
-            logging.info(f"{execution_pct}% of PDFs processed, estimated time remaining: {time_remaining}")
+            logging.info(f"{pct_execution}% of PDFs processed, estimated time remaining: {time_remaining}")
 
             # update tag hits
-            logging.debug(f"Search Items:\n{search_items['Destination']}")
-            logging.debug(f"NF Search Items: \n{nf_search_items}")
             search_items.update(nf_search_items)
-            logging.debug(f"Updated search items: \n{search_items}")
 
         # dump tag hits
         self._dump_dataframe(search_items)
@@ -134,48 +131,45 @@ class SearchAndSplit:
 
         return search_items
 
-    def _split_pdf(self, search_items, pdf_source):
-        # sort tag hits by page number
+    def _split_pdf(self, search_items, pdf):
+        # sort search items by page number
         search_items = search_items.sort_values(by='Page').reset_index(drop=True)
         logging.debug(f"Search items to split from source pdf:\n{search_items}")
 
-        # create pdf reader
-        pdf_reader = pypdf.PdfReader(pdf_source)
-
-        # iterate through each tag in tag hits
+        # iterate through each item in search items
         for idx, row in search_items.iterrows():
 
             # set idx for next tag in list
             next_idx = idx + 1
 
-            # find the first and last page related to the tag
-            page_range = {
-                'first': search_items.at[idx, 'Page']
-            }
-
-            # catch tags which were not found
-            if page_range['first'] == constants.not_found:
-                logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf_source.name}, skipping split...")
+            # skip items which were not found
+            if search_items.at[idx, 'Page'] == constants.not_found:
+                logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf.name}, skipping split...")
 
                 # log tag as not found
-                search_items.at[idx, 'Destination'] = 'N/F'
-
+                search_items.at[idx, 'Destination'] = constants.not_applicable
                 logging.debug(search_items.at[idx, 'Destination'])
 
                 # skip this tag
                 continue
 
-            # catch key out-of-bounds
+            # find the first and last page related to the tag
+            page_range = {
+                'first': search_items.at[idx, 'Page']
+            }
             try:
                 page_range['last'] = search_items.at[next_idx, 'Page']
+
+            # catch key out-of-bounds when selecting next tag
             except KeyError as error:
+                page_range['last'] = pdf.number_of_pages
                 logging.info(f"Reached last tag, setting page range to end of PDF")
-                page_range['last'] = len(pdf_reader.pages)
+                logging.debug(error)
 
             # catch multiple tags being found on the same page
             # catch next tag not being found
             while page_range['first'] >= page_range['last'] or page_range['last'] == constants.not_found \
-                    and page_range['last'] <= len(pdf_reader.pages):
+                    and page_range['last'] <= pdf.number_of_pages:
 
                 # increment next tag index
                 next_idx = next_idx + 1
@@ -187,34 +181,29 @@ class SearchAndSplit:
                 # if index is out-of-bounds, set last page to end of pdf
                 except KeyError:
                     logging.info('Reader reached end of PDF')
-                    page_range['last'] = len(pdf_reader.pages)
+                    page_range['last'] = pdf.number_of_pages
 
             # generate output's file name
             if self.search_type == constants.calibration:
-                tag = slugify.slugify(search_items.at[idx, 'Tag No'], separator="_", lowercase=False)
-                file_name = f"Calibration Certificate - {tag}"
+                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
+            elif self.search_type == constants.atex:
+                file_name = atex.create_file_name(search_items.at[idx, 'Model'])
             else:
-                model = slugify.slugify(search_items.at[idx, 'Model'], separator="_", lowercase=False)
-                file_name = f"ATEX Certificate - {model}"
-            output_name = self.output_folder / f'{file_name}.pdf'
+                logging.error(f"Search type {self.search_type} not recognized.")
+                file_name = slugify.slugify(search_items.at[idx, 'Tag No'], separator="_", lowercase=False)
+            output_path = self.output_folder / f'{file_name}.pdf'
 
             # save output file name
             search_items.at[idx, 'Destination'] = file_name
 
-            # extract all pages in page range
-            pdf_writer = pypdf.PdfWriter()
-            for page_number in range(int(page_range['first']), int(page_range['last'])):
-                pdf_writer.add_page(pdf_reader.pages[page_number])
-
-            # write file to disk
-            try:
-                with open(output_name, 'wb') as output_file:
-                    pdf_writer.write(output_file)
-            except OSError as error:
-                logging.error(f"Unable to write to file.\n{error}")
-
-            logging.info(f"Generated {output_name.name} for item")
-            logging.debug(search_items.iloc[idx])
+            # split and write to file
+            # check if file exists
+            if output_path.is_file():
+                logging.warning(f"File {output_path} already exists, skipping split...")
+            else:
+                if not pdf.split(page_range, output_path):
+                    # if pdf fails to split, change destination to not applicable
+                    search_items.at[idx, 'Destination'] = constants.not_applicable
 
         return search_items
 

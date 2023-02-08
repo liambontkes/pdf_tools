@@ -1,6 +1,8 @@
 import logging
 import re
 
+from slugify import slugify
+
 import constants
 
 
@@ -28,3 +30,8 @@ def get_search_strings(model):
     logging.debug(f"Cleaned search strings for {model}: {ls_search}")
 
     return ls_search
+
+
+def create_file_name(model):
+    safe_model = slugify(model, separator='_', lowercase=False)
+    return f"ATEX Certificate - {safe_model}"
