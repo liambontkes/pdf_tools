@@ -9,12 +9,13 @@ import logging
 import pathlib
 import time
 
+import numpy
 import pandas
-import slugify
 
 import atex
 import calibration
 import constants
+import hmi
 import pdf_handler
 
 
@@ -27,10 +28,6 @@ class SearchAndSplit:
         self.supplier = supplier_name
 
     def search_and_split(self):
-        """
-        Searches the Excel file in the input folder for a list of tags, then searches the PDF documents for each tag.
-        When found, extracts all tagged pages and saves them to the output folder.
-        """
         # start timer
         self.start_time = time.time()
         logging.info(f"Starting execution timer")
@@ -130,16 +127,8 @@ class SearchAndSplit:
         return search_items
 
     def _split_pdf(self, search_items, pdf):
-        # sort search items by page number
-        search_items = search_items.sort_values(by='Page')
-        logging.debug(f"Search items to split from source pdf:\n{search_items}")
-
         # iterate through each item in search items
         for idx, row in search_items.iterrows():
-
-            # set idx for next tag in list
-            next_idx = idx + 1
-
             # skip items which were not found
             if search_items.at[idx, 'Page'] == constants.not_found:
                 logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf.name}, skipping split...")
@@ -151,48 +140,23 @@ class SearchAndSplit:
                 # skip this tag
                 continue
 
-            # find the first and last page related to the tag
-            page_range = {
-                'first': search_items.at[idx, 'Page']
-            }
-            try:
-                page_range['last'] = search_items.at[next_idx, 'Page']
+            # get range of pages to extract
+            page_range = self._get_page_range(idx, search_items)
 
-            # catch key out-of-bounds when selecting next tag
-            except KeyError as error:
-                page_range['last'] = pdf.number_of_pages
-                logging.info(f"Reached last tag, setting page range to end of PDF")
-                logging.debug(error)
-
-            # catch multiple tags being found on the same page
-            # catch next tag not being found
-            while page_range['first'] >= page_range['last'] or page_range['last'] == constants.not_found \
-                    and page_range['last'] <= pdf.number_of_pages:
-
-                # increment next tag index
-                next_idx = next_idx + 1
-
-                # update page range
-                try:
-                    page_range['last'] = search_items.at[next_idx, 'Page']
-
-                # if index is out-of-bounds, set last page to end of pdf
-                except KeyError:
-                    logging.info('Reader reached end of PDF')
-                    page_range['last'] = pdf.number_of_pages
-
-            # generate output's file name
+            # generate output file name
             if self.search_type == constants.calibration:
                 file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
             elif self.search_type == constants.atex:
                 file_name = atex.create_file_name(search_items.at[idx, 'Model'])
             else:
                 logging.error(f"Search type {self.search_type} not recognized.")
-                file_name = slugify.slugify(search_items.at[idx, 'Tag No'], separator="_", lowercase=False)
-            output_path = self.output_folder / f'{file_name}.pdf'
+                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
 
             # save output file name
             search_items.at[idx, 'Destination'] = file_name
+
+            # create output path
+            output_path = self.output_folder / f'{file_name}.pdf'
 
             # split and write to file
             # check if file exists
@@ -204,6 +168,23 @@ class SearchAndSplit:
                     search_items.at[idx, 'Destination'] = constants.not_applicable
 
         return search_items
+
+    @staticmethod
+    def _get_page_range(idx_search, search_items):
+        # set first page number
+        page_range = {
+            'first': search_items.at[idx_search, 'Page']
+        }
+
+        # sort values by page number
+        sorted_search_items = search_items.sort_values(by='Page')
+
+        # sort search for item with higher page number
+        idx_adjacent = numpy.searchsorted(sorted_search_items.Page.values, page_range['first'], side='right')
+        page_range['last'] = sorted_search_items.at[idx_adjacent, 'Page']
+        logging.debug(f"Last page for {search_items.at[idx_search, 'Tag No']} set to {page_range['last']}")
+
+        return page_range
 
     def _dump_dataframe(self, dataframe):
         """
@@ -225,28 +206,11 @@ if __name__ == '__main__':
     # set log level
     logging.basicConfig(level=logging.DEBUG)
 
-    # find batch to process
-    supplier = input("Which supplier would you like to process?: ")
-    batch_root = pathlib.Path(constants.batch_root)
-    if len(sorted(batch_root.glob(supplier))) != 0:
-        print(f"Found batch for supplier {supplier}.")
-        batch_path = sorted(batch_root.glob(supplier))[0]
-    else:
-        print(f"No batch found for supplier {supplier}. Create one using create_batch.")
-        exit()
+    # select batch to process
+    batch_path = hmi.get_batch_process()
 
     # select document type to process
-    doc_type = input("What is the document type you want to process? "
-                     f"Options are '{constants.atex}', '{constants.calibration}', '{constants.sort}': ")
-    if doc_type == constants.atex or doc_type == 'a':
-        doc_type = constants.atex
-    elif doc_type == constants.calibration or doc_type == 'c':
-        doc_type = constants.calibration
-    elif doc_type == constants.sort or doc_type == 's':
-        doc_type = constants.sort
-    else:
-        print(f"Document type {doc_type} not recognized.")
-        exit()
+    doc_type = hmi.get_document_type()
 
     # set input and output folder
     input_folder_path = batch_path / doc_type / "input"
@@ -254,5 +218,5 @@ if __name__ == '__main__':
     output_folder_path.mkdir(parents=True, exist_ok=True)
 
     # run search and split
-    sas = SearchAndSplit(doc_type, input_folder_path, output_folder_path, supplier)
+    sas = SearchAndSplit(doc_type, input_folder_path, output_folder_path, batch_path.name)
     sas.search_and_split()
