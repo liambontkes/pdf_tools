@@ -33,5 +33,5 @@ def get_search_strings(model):
 
 
 def create_file_name(model):
-    safe_model = slugify(model, separator='_', lowercase=False)
+    safe_model = slugify(model, separator=' ', lowercase=False)
     return f"ATEX Certificate - {safe_model}"

@@ -5,18 +5,16 @@
 # It will then extract the relevant pages from the PDF doc and rename them according
 # to their tag.
 import datetime
-import functools
 import logging
 import pathlib
 import time
 
 import pandas
-import pypdf
 import slugify
 
-import constants
-import calibration
 import atex
+import calibration
+import constants
 import pdf_handler
 
 
@@ -133,7 +131,7 @@ class SearchAndSplit:
 
     def _split_pdf(self, search_items, pdf):
         # sort search items by page number
-        search_items = search_items.sort_values(by='Page').reset_index(drop=True)
+        search_items = search_items.sort_values(by='Page')
         logging.debug(f"Search items to split from source pdf:\n{search_items}")
 
         # iterate through each item in search items

@@ -13,4 +13,4 @@ df_columns = {
 
 # paths
 batch_root = r'C:\Users\BONT17424\PycharmProjects\pdf_search_split\batch'
-instrument_index = r'C:\Users\BONT17424\PycharmProjects\pdf_search_split\misc\H363404-00000-270-216-0001, 0002 & 0003-MstrRedline.xlsx'
+instrument_index = r'C:\Users\BONT17424\PycharmProjects\pdf_search_split\misc\Instrument Index - Working.xlsx'

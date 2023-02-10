@@ -10,7 +10,7 @@ def get_search_strings(tag):
     ls_search = []
 
     # only search for transmitter and indicator tags
-    if re.search(r"[IT]\d+\w?", tag):
+    if re.search(r"[TE]\d+\w?", tag):
         logging.debug(f"Tag {tag} is type transmitter or indicator, calibration required")
 
         # only search for last 3 sections of the tag
@@ -25,5 +25,5 @@ def get_search_strings(tag):
 
 
 def create_file_name(tag):
-    safe_tag = slugify(tag, separator='_', lowercase=False)
+    safe_tag = slugify(tag, separator='.', lowercase=False)
     return f"Calibration Certificate - {safe_tag}"

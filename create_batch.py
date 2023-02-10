@@ -9,7 +9,7 @@ if __name__ == "__main__":
     root = pathlib.Path(constants.batch_root)
 
     # path to input Excel file
-    excel = pathlib.Path(r'C:\Users\BONT17424\PycharmProjects\pdf_search_split\misc\H363404-00000-270-216-0001, 0002 & 0003-MstrRedline.xlsx')
+    excel = pathlib.Path(constants.instrument_index)
 
     doc_types = [
         constants.atex,
