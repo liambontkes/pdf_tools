@@ -8,6 +8,9 @@ import constants
 
 class PdfHandler:
     def __init__(self, source):
+        self.page_width_x = 595
+        self.page_height_y = 842
+        self.font_size = 6
         self.source = pathlib.Path(source)
         self.reader = pypdf.PdfReader(self.source)
 
@@ -58,6 +61,50 @@ class PdfHandler:
             logging.error(f"{error}. Unable to write {path.name} to file.")
             return False
 
+    def _annotate(self, page_number, annotation_format, path):
+        # copy pdf
+        writer = pypdf.PdfWriter()
+        for page in self.reader.pages:
+            writer.add_page(page)
+
+        # add annotation to page
+        annotation = pypdf.generic.AnnotationBuilder.free_text(
+            text=annotation_format.text,
+            rect=annotation_format.rect,
+            font=annotation_format.font,
+            bold=annotation_format.bold,
+            italic=annotation_format.italic,
+            font_size=annotation_format.font_size,
+            font_color=annotation_format.font_color,
+            border_color=annotation_format.border_color,
+            background_color=annotation_format.background_color
+        )
+        writer.add_annotation(page_number, annotation)
+
+        # write file to disk
+        try:
+            with open(path, 'wb') as output:
+                writer.write(output)
+            logging.info(f"Wrote {path.name} to {path.parent}!")
+            return True
+
+        # if an error occurs, return False
+        except OSError as error:
+            logging.error(f"{error}. Unable to write {path.name} to file.")
+            return False
+
+    def annotate_tags(self, page_number, tags, path):
+        # get page height and width
+        box = self.reader.pages[page_number].mediabox
+        page_width = box.width
+        page_height = box.height
+
+        # get tags annotation formatting
+        tags_annotation = TagsAnnotation(tags, page_height, page_width)
+
+        # annotate to new file
+        return self._annotate(page_number, tags_annotation, path)
+
     @property
     def name(self):
         return self.source.stem
@@ -65,6 +112,51 @@ class PdfHandler:
     @property
     def number_of_pages(self):
         return len(self.reader.pages)
+
+
+class TagsAnnotation:
+    font = "Arial"
+    bold = False
+    italic = False
+    font_number = 6
+    font_color = "000000"
+    border_color = "ffd700"
+    background_color = "ffff00"
+
+    def __init__(self, tags, page_height, page_width):
+        self.tags = tags
+        self.page_width = page_width
+        self.page_height = page_height
+
+        self.width = self._get_box_width()
+        self.height = self._get_box_length()
+        self.x_position = self._get_x_position()
+        self.y_position = self._get_y_position()
+
+        self.text = self._get_text()
+
+    def _get_box_width(self):
+        return max(len(tag) for tag in self.tags) * self.font_number
+
+    def _get_box_length(self):
+        return len(self.tags) * self.font_number
+
+    def _get_x_position(self):
+        return self.page_width - (self.width / 2)
+
+    def _get_y_position(self):
+        return self.page_height - (self.height / 2)
+
+    def _get_text(self):
+        return "\n".join(self.tags)
+
+    @property
+    def font_size(self):
+        return f"{self.font_number}pt"
+
+    @property
+    def rect(self):
+        return self.width, self.height, self.x_position, self.y_position
 
 
 def get_pdfs(directory):
