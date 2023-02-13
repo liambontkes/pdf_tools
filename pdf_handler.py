@@ -1,4 +1,5 @@
 import logging
+import math
 import pathlib
 
 import pypdf
@@ -8,9 +9,6 @@ import constants
 
 class PdfHandler:
     def __init__(self, source):
-        self.page_width_x = 595
-        self.page_height_y = 842
-        self.font_size = 6
         self.source = pathlib.Path(source)
         self.reader = pypdf.PdfReader(self.source)
 
@@ -123,29 +121,25 @@ class TagsAnnotation:
     border_color = "ffd700"
     background_color = "ffff00"
 
+    height_scale = 12
+    width_scale = 3.6
+    text_buffer = 10
+
     def __init__(self, tags, page_height, page_width):
         self.tags = tags
-        self.page_width = page_width
-        self.page_height = page_height
+        self.page_width = float(page_width)
+        self.page_height = float(page_height)
 
         self.width = self._get_box_width()
-        self.height = self._get_box_length()
-        self.x_position = self._get_x_position()
-        self.y_position = self._get_y_position()
+        self.height = self._get_box_height()
 
         self.text = self._get_text()
 
     def _get_box_width(self):
-        return max(len(tag) for tag in self.tags) * self.font_number
+        return max(len(tag) for tag in self.tags) * self.width_scale
 
-    def _get_box_length(self):
-        return len(self.tags) * self.font_number
-
-    def _get_x_position(self):
-        return self.page_width - (self.width / 2)
-
-    def _get_y_position(self):
-        return self.page_height - (self.height / 2)
+    def _get_box_height(self):
+        return len(self.tags) * self.font_number + self.text_buffer
 
     def _get_text(self):
         return "\n".join(self.tags)
@@ -156,7 +150,15 @@ class TagsAnnotation:
 
     @property
     def rect(self):
-        return self.width, self.height, self.x_position, self.y_position
+        # lower left corner coordinates
+        x_lower_left = self.page_width - self.width
+        y_lower_left = self.page_height - self.height
+
+        # upper right corner coordinates
+        x_upper_right = self.page_width
+        y_upper_right = self.page_height
+
+        return x_lower_left, y_lower_left, x_upper_right, y_upper_right
 
 
 def get_pdfs(directory):
