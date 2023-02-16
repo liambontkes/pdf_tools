@@ -17,7 +17,56 @@ import calibration
 import constants
 import hmi
 import pdf_handler
+import pdf_tools
 
+
+class SplitPdf(pdf_tools.PdfTool):
+    def __init__(self, input_path, output_path, df_split):
+        self.df_split = df_split
+        super().__init__(input_path, output_path)
+
+    def _split_pdf(self, search_items, pdf):
+        # iterate through each item in search items
+        for idx, row in search_items.iterrows():
+            # skip items which were not found
+            if search_items.at[idx, 'Page'] == constants.not_found:
+                logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf.name}, skipping split...")
+
+                # log tag as not found
+                search_items.at[idx, 'Destination'] = constants.not_applicable
+                logging.debug(search_items.at[idx, 'Destination'])
+
+                # skip this tag
+                continue
+
+            # get range of pages to extract
+            page_range = self._get_page_range(idx, search_items)
+
+            # generate output file name
+            if self.search_type == constants.calibration:
+                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
+            elif self.search_type == constants.atex:
+                file_name = atex.create_file_name(search_items.at[idx, 'Model'])
+            else:
+                logging.error(f"Search type {self.search_type} not recognized.")
+                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
+
+            # save output file name
+            search_items.at[idx, 'Destination'] = file_name
+
+            # create output path
+            output_path = self.output_folder / f'{file_name}.pdf'
+
+            # split and write to file
+            # check if file exists
+            if output_path.is_file():
+                logging.warning(f"File {output_path} already exists, skipping split...")
+            else:
+                if not pdf.split(page_range, output_path):
+                    # if pdf fails to split, change destination to not applicable
+                    search_items.at[idx, 'Destination'] = constants.not_applicable
+
+        return search_items
 
 class SearchAndSplit:
     def __init__(self, search_type, input_path, output_path, supplier_name):
@@ -102,7 +151,8 @@ class SearchAndSplit:
 
     def _create_search(self, search_items):
         if self.search_type == constants.calibration:
-            search_items['Search'] = search_items.apply(lambda row: calibration.get_search_strings(row['Tag No']), axis=1)
+            search_items['Search'] = search_items.apply(lambda row: calibration.get_search_strings(row['Tag No']),
+                                                        axis=1)
         elif self.search_type == constants.atex:
             search_items['Search'] = search_items.apply(lambda row: atex.get_search_strings(row['Model']), axis=1)
         else:
@@ -200,23 +250,3 @@ class SearchAndSplit:
     def _get_execution_time(self):
         execution_time = time.time() - self.start_time
         return datetime.timedelta(seconds=execution_time)
-
-
-if __name__ == '__main__':
-    # set log level
-    logging.basicConfig(level=logging.DEBUG)
-
-    # select batch to process
-    batch_path = hmi.get_batch_process()
-
-    # select document type to process
-    doc_type = hmi.get_document_type()
-
-    # set input and output folder
-    input_folder_path = batch_path / doc_type / "input"
-    output_folder_path = batch_path / doc_type / "output"
-    output_folder_path.mkdir(parents=True, exist_ok=True)
-
-    # run search and split
-    sas = SearchAndSplit(doc_type, input_folder_path, output_folder_path, batch_path.name)
-    sas.search_and_split()

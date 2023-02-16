@@ -6,6 +6,7 @@ not_applicable = 'N/A'
 atex = 'atex'
 calibration = 'calibration'
 sort = 'sort'
+annotate = 'annotate'
 df_columns = {
     atex: ['Tag No', 'Supplied By', 'Model'],
     calibration: ['Tag No', 'Supplied By']
