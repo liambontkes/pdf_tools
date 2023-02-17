@@ -39,12 +39,12 @@ class PdfHandler:
         # if not found, return not found
         return constants.not_found
 
-    def split(self, page_range, path):
+    def split(self, first_page, last_page, path):
         # create new writer
         writer = pypdf.PdfWriter()
 
         # extract all pages in page range
-        for page in range(int(page_range['first']), int(page_range['last'])):
+        for page in range(int(first_page), int(last_page)):
             writer.add_page(self.reader.pages[page])
 
         # write file to disk

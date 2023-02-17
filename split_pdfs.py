@@ -12,61 +12,67 @@ import time
 import numpy
 import pandas
 
-import atex
-import calibration
+import model
+import tag
 import constants
 import hmi
 import pdf_handler
 import pdf_tools
 
 
-class SplitPdf(pdf_tools.PdfTool):
-    def __init__(self, input_path, output_path, df_split):
-        self.df_split = df_split
+class SplitPdfs(pdf_tools.PdfTool):
+    def __init__(self, split_type, input_path, output_path, df_split):
+        self.df = df_split
+        self.split_type = split_type
         super().__init__(input_path, output_path)
 
-    def _split_pdf(self, search_items, pdf):
-        # iterate through each item in search items
-        for idx, row in search_items.iterrows():
-            # skip items which were not found
-            if search_items.at[idx, 'Page'] == constants.not_found:
-                logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf.name}, skipping split...")
+    def run(self):
+        if self.split_type == 'tag':
+            for idx, row in self.df.iterrows():
+                self._split_pdf(row)
 
-                # log tag as not found
-                search_items.at[idx, 'Destination'] = constants.not_applicable
-                logging.debug(search_items.at[idx, 'Destination'])
+        elif self.split_type == 'model':
+            # get list of unique models
+            ls_models = self.df.Model.unique()
 
-                # skip this tag
-                continue
+            for unique_model in ls_models:
+                # get first
+                row = self.df[self.df['Model'] == unique_model].iloc[0]
 
-            # get range of pages to extract
-            page_range = self._get_page_range(idx, search_items)
 
-            # generate output file name
-            if self.search_type == constants.calibration:
-                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
-            elif self.search_type == constants.atex:
-                file_name = atex.create_file_name(search_items.at[idx, 'Model'])
+
+    def _generate_file_name(self, row):
+        # generate output file name
+        if self.split_type == 'tag':
+            file_name = tag.create_file_name(row['Tag No'])
+        elif self.split_type == 'model':
+            file_name = model.create_file_name(row['Model'])
+        else:
+            logging.error(f"Search type {self.split_type} not recognized.")
+            file_name = tag.create_file_name(row['Tag No'])
+        return file_name
+
+    def _split_pdf(self, row):
+        # check if found
+        if row['First Page'] == constants.not_found:
+            logging.info(f"")
+        # generate file name
+        file_name = self._generate_file_name(row)
+
+        # create output folder
+        output_path = self.output_folder / f'{file_name}.pdf'
+
+        # split and write to file
+        # check if file exists
+        if output_path.is_file():
+            logging.warning(f"File {output_path} already exists, skipping split...")
+        else:
+            # return file_name if able to write to file
+            if row['Source'].split(row['First Page'], row['Last Page'], output_path):
+                return file_name
             else:
-                logging.error(f"Search type {self.search_type} not recognized.")
-                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
+                return False
 
-            # save output file name
-            search_items.at[idx, 'Destination'] = file_name
-
-            # create output path
-            output_path = self.output_folder / f'{file_name}.pdf'
-
-            # split and write to file
-            # check if file exists
-            if output_path.is_file():
-                logging.warning(f"File {output_path} already exists, skipping split...")
-            else:
-                if not pdf.split(page_range, output_path):
-                    # if pdf fails to split, change destination to not applicable
-                    search_items.at[idx, 'Destination'] = constants.not_applicable
-
-        return search_items
 
 class SearchAndSplit:
     def __init__(self, search_type, input_path, output_path, supplier_name):

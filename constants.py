@@ -3,13 +3,10 @@ not_found = -1
 not_applicable = 'N/A'
 
 # configuration
-atex = 'atex'
-calibration = 'calibration'
-sort = 'sort'
-annotate = 'annotate'
+tools = ['split-tag', 'split-model', 'sort', 'annotate']
 df_columns = {
-    atex: ['Tag No', 'Supplied By', 'Model'],
-    calibration: ['Tag No', 'Supplied By']
+    'split-tag': ['Tag No', 'Supplied By', 'Model'],
+    'split-model': ['Tag No', 'Supplied By']
 }
 
 # paths
