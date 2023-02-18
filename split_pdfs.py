@@ -29,17 +29,23 @@ class SplitPdfs(pdf_tools.PdfTool):
     def run(self):
         if self.split_type == 'tag':
             for idx, row in self.df.iterrows():
-                self._split_pdf(row)
+                split_file_name = self._split_pdf(row)
+                self.df.at[idx, 'Destination'] = split_file_name
 
         elif self.split_type == 'model':
             # get list of unique models
             ls_models = self.df.Model.unique()
 
-            for unique_model in ls_models:
-                # get first
+            for idx, unique_model in enumerate(ls_models):
+                # get first row with the unique model
                 row = self.df[self.df['Model'] == unique_model].iloc[0]
+                split_file_name = self._split_pdf(row)
+                self.df.loc[self.df['Model'] == unique_model, 'Destination'] = split_file_name
 
+        else:
+            logging.error(f"Split type {self.split_type} not recognized. Skipping split...")
 
+        logging.info(f"Done splitting PDFs")
 
     def _generate_file_name(self, row):
         # generate output file name

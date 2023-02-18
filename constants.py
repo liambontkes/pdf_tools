@@ -1,6 +1,7 @@
 # error handling
 not_found = -1
 not_applicable = 'N/A'
+empty = 'N/P'
 
 # configuration
 tools = ['split-tag', 'split-model', 'sort', 'annotate']
