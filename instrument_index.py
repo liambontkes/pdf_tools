@@ -89,12 +89,12 @@ class InstrumentIndex:
     def get_models(self, return_if_found=False):
         # if return_if_found is set, return all models
         if return_if_found:
-            return self.df.Model.unique()
+            return self.df['Model'].unique()
 
         # otherwise only return models which have not been found
         else:
             nf_models = self.df.loc[self.df['Source'] == constants.empty]
-            return nf_models.Model.unique()
+            return nf_models['Model'].unique()
 
     def get_by_model(self, model_id, return_if_found=False):
         # extract rows associated with model no
@@ -108,9 +108,19 @@ class InstrumentIndex:
         else:
             return rows
 
-    def get_by_destination(self, destination, sort=True):
-        # extract rows with common destinations
-        rows = self.df.loc[self.df['Destination'] == destination]
+    def get_sources(self, return_if_found=False):
+        # if return_if_found is set, return all sources
+        if return_if_found:
+            return self.df['Source'].unique()
+
+        # otherwise only return sources which have not been assigned destinations
+        else:
+            nf_sources = self.df.loc[self.df['Destination'] == constants.empty]
+            return nf_sources['Source'].unique()
+
+    def get_by_source(self, source, sort=True):
+        # extract rows with common sources
+        rows = self.df.loc[self.df['Source'] == source]
 
         # sort by First Page number
         if sort:
@@ -118,8 +128,12 @@ class InstrumentIndex:
 
         return rows
 
-    def get_not_found(self):
-        return self.df.loc[self.df['Source'].isna()]
+    def get_no_page_range(self):
+        """
+        Finds all items which have been found but not assigned a page range.
+        :return: Items which have not been assigned a page range.
+        """
+        return self.df.loc[self.df['First Page'] != constants.not_found and self.df['Last Page'] == constants.not_found]
 
     def update(self, df_update):
         self.df.update(df_update)

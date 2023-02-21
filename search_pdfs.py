@@ -1,5 +1,4 @@
 import logging
-import time
 
 import numpy
 import pandas
@@ -38,6 +37,9 @@ class SearchPdfs(pdf_tools.PdfTool):
 
             # log execution stats
             self.log_execution(n_processed=idx + 1, n_total=len(self.ls_pdf))
+
+        # get list of items to assign page ranges
+        no_page_range_rows = self.index.get_no_page_range()
 
         logging.info(f"Done searching all PDFs.")
         return self.index
@@ -113,9 +115,8 @@ class SearchPdfs(pdf_tools.PdfTool):
         :param row: The row to set the page range for.
         :return: Whether the page range was set successfully.
         """
-        # get rows with common destination
-        destination = row['Destination']
-        sorted_rows = self.index.get_by_destination(destination, sort=True)
+        # get rows with common source
+        sorted_rows = self.index.get_by_source(row['Source'], sort=True)
 
         # sort search for row with higher page number
         idx_adjacent = numpy.searchsorted(sorted_rows['First Page'], row['First Page'], side='right')
