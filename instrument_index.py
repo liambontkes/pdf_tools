@@ -108,6 +108,16 @@ class InstrumentIndex:
         else:
             return rows
 
+    def get_by_destination(self, destination, sort=True):
+        # extract rows with common destinations
+        rows = self.df.loc[self.df['Destination'] == destination]
+
+        # sort by First Page number
+        if sort:
+            rows = rows.sort_values(by='First Page')
+
+        return rows
+
     def get_not_found(self):
         return self.df.loc[self.df['Source'].isna()]
 
@@ -123,3 +133,7 @@ class InstrumentIndex:
 
         # write df to file
         df_dump.to_excel(destination, sheet_name='Instrument Index')
+
+    @property
+    def length(self):
+        return len(self.df.index)

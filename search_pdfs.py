@@ -1,6 +1,7 @@
 import logging
 import time
 
+import numpy
 import pandas
 
 import constants
@@ -34,7 +35,9 @@ class SearchPdfs(pdf_tools.PdfTool):
             # search for items in pdf
             self._search(pdf)
             logging.info(f"Done searching in {pdf.name}!")
-            logging.info(f"Time to process PDF: {self.get_execution_time()}")
+
+            # log execution stats
+            self.log_execution(n_processed=idx + 1, n_total=len(self.ls_pdf))
 
         logging.info(f"Done searching all PDFs.")
         return self.index
@@ -104,3 +107,32 @@ class SearchPdfs(pdf_tools.PdfTool):
 
         return True
 
+    def _set_page_range(self, row: pandas.DataFrame) -> bool:
+        """
+        Set the page range of the row.
+        :param row: The row to set the page range for.
+        :return: Whether the page range was set successfully.
+        """
+        # get rows with common destination
+        destination = row['Destination']
+        sorted_rows = self.index.get_by_destination(destination, sort=True)
+
+        # sort search for row with higher page number
+        idx_adjacent = numpy.searchsorted(sorted_rows['First Page'], row['First Page'], side='right')
+
+        if self.type == 'tag':
+            row['Last Page'] = sorted_rows.at[idx_adjacent, 'First Page']
+            self.index.update(row)
+            return True
+
+        # apply model page range to all models
+        elif self.type == 'model':
+            model_rows = self.index.get_by_model(row['Model'], return_if_found=True)
+            model_rows['Last Page'] = sorted_rows.at[idx_adjacent, 'First Page']
+            self.index.update(model_rows)
+            return True
+
+        # do nothing if model not recognized
+        else:
+            logging.error(f"Split type {self.type} not recognized. Skipping search...")
+            return False

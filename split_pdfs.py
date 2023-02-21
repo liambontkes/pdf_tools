@@ -13,6 +13,7 @@ import numpy
 import pandas
 
 import constants
+import instrument_index
 import model
 import pdf_handler
 import pdf_tools
@@ -20,15 +21,15 @@ import tag
 
 
 class SplitPdfs(pdf_tools.PdfTool):
-    def __init__(self, split_type, input_path, output_path, instrument_index):
+    def __init__(self, split_type: str, input_path: pathlib.Path, output_path: pathlib.Path, index: instrument_index.InstrumentIndex) -> None:
         """
         PDF Split tool, subclass of PdfTool.
         :param split_type: The type of items to split on.
         :param input_path: The input folder to read from.
         :param output_path: The output folder to write to.
-        :param instrument_index: The Search Index to split by.
+        :param index: The Search Index to split by.
         """
-        self.df = instrument_index
+        self.index = index
         self.type = split_type
         super().__init__(input_path, output_path)
 
@@ -42,45 +43,58 @@ class SplitPdfs(pdf_tools.PdfTool):
 
         # split based on split type
         if self.type == 'tag':
-            for idx, row in self.df.iterrows():
-                split_file_name = self._split_pdf(row)
-                self.df.at[idx, 'Destination'] = split_file_name
+            tags = self.index.get_tags(return_if_found=True)
+            for idx, row in tags.iterrows():
+                # split file
+                file_name = self._split_pdf(row)
+
+                # save destination
+                row['Destination'] = file_name
+
+                # log execution stats
+                self.log_execution(n_processed=idx + 1, n_total=self.index.length)
 
         elif self.type == 'model':
             # get list of unique models
-            ls_models = self.df.Model.unique()
+            ls_models = self.index.get_models(return_if_found=True)
 
-            for idx, unique_model in enumerate(ls_models):
-                # get first row with the unique model
-                row = self.df[self.df['Model'] == unique_model].iloc[0]
-                split_file_name = self._split_pdf(row)
-                self.df.loc[self.df['Model'] == unique_model, 'Destination'] = split_file_name
+            for idx, mdl in enumerate(ls_models):
+                # get first row associated with the model
+                models = self.index.get_by_model(mdl, return_if_found=True)
+                row = models.iloc[0]
+
+                # split based on the model
+                file_name = self._split_pdf(row)
+
+                # save destination for all models
+                models.loc[models['Destination']] = file_name
+
+                # update index
+                self.index.update(models)
+
+                # log execution stats
+                self.log_execution(n_processed=idx + 1, n_total=len(ls_models))
 
         else:
             logging.error(f"Split type {self.type} not recognized. Skipping split...")
 
-        logging.info(f"Done splitting PDFs")
+        logging.info(f"Done splitting PDFs.")
         return True
 
-    def _generate_file_name(self, row):
-        # generate output file name
-        if self.type == 'tag':
-            file_name = tag.create_file_name(row['Tag No'])
-        elif self.type == 'model':
-            file_name = model.create_file_name(row['Model'])
-        else:
-            logging.error(f"Search type {self.type} not recognized.")
-            file_name = tag.create_file_name(row['Tag No'])
-        return file_name
-
-    def _split_pdf(self, row):
+    def _split_pdf(self, row: pandas.DataFrame) -> str:
+        """
+        Splits a PDF based on the page range in row.
+        :param row: The row to split the PDF on.
+        :return: The destination file name or applicable error.
+        """
         # check if found
         if row['First Page'] == constants.not_found:
-            logging.info(f"")
+            return constants.not_applicable
+
         # generate file name
         file_name = self._generate_file_name(row)
 
-        # create output folder
+        # create output path
         output_path = self.output_folder / f'{file_name}.pdf'
 
         # split and write to file
@@ -92,188 +106,20 @@ class SplitPdfs(pdf_tools.PdfTool):
             if row['Source'].split(row['First Page'], row['Last Page'], output_path):
                 return file_name
             else:
-                return False
+                return constants.error
 
-
-class SearchAndSplit:
-    def __init__(self, search_type, input_path, output_path, supplier_name):
-        self.start_time = None
-        self.search_type = search_type
-        self.input_folder = pathlib.Path(input_path)
-        self.output_folder = pathlib.Path(output_path)
-        self.supplier = supplier_name
-
-    def search_and_split(self):
-        # start timer
-        self.start_time = time.time()
-        logging.info(f"Starting execution timer")
-
-        # get list of pdfs to process
-        ls_pdf = pdf_handler.get_pdfs(self.input_folder)
-
-        # get list of search items
-        search_items = self._get_search_items()
-        logging.info(f"Search items extracted; execution time was: {self._get_execution_time()}")
-
-        # process each input pdf
-        for idx, pdf in enumerate(ls_pdf):
-            # filter out items
-            nf_search_items = self._filter_search_items(search_items)
-
-            # search for item locations within the pdf
-            nf_search_items = self._search_for_items(pdf, nf_search_items)
-            logging.info(f"Done searching {pdf.name}; execution time was: {self._get_execution_time()}")
-
-            # split pdf based on tag locations
-            nf_search_items = self._split_pdf(nf_search_items, pdf)
-            logging.info(f"Done processing {pdf.name}; execution time was: {self._get_execution_time()}")
-
-            pct_execution = (idx + 1) / len(ls_pdf) * 100.0
-            time_remaining = self._get_execution_time() * (len(ls_pdf) - (idx + 1))
-            logging.info(f"{pct_execution}% of PDFs processed, estimated time remaining: {time_remaining}")
-
-            # update tag hits
-            search_items.update(nf_search_items)
-
-        # dump tag hits
-        self._dump_dataframe(search_items)
-
-        logging.info(f"Search and Split complete; execution time was: {self._get_execution_time()}")
-
-    def _get_search_items(self):
-        # select first Excel file found in input folder
-        search_excel = sorted(pathlib.Path(self.input_folder).glob('*.xlsx'))[0]
-
-        # extract list of tags from Excel file
-        search_items = pandas.read_excel(search_excel,
-                                         sheet_name='Instrument Index',
-                                         usecols=['Tag No', 'Supplied By', 'Model'])
-
-        # limit search to supplier
-        search_items = search_items[search_items['Supplied By'] == self.supplier]
-        logging.info(f"Limited search to {self.supplier}, number of items to search for is now {len(search_items)}")
-
-        # clean search items
-        # drop cells without tag numbers
-        search_items = search_items.dropna(subset=['Tag No'])
-
-        # fix tag notation
-        search_items['Tag No'] = search_items['Tag No'].replace(to_replace='-', value='_', regex=True)
-
-        # interpret all Models as strings
-        search_items['Model'] = search_items['Model'].astype('string')
-
-        logging.debug(f"Cleaned tag list: \n{search_items}")
-
-        # add columns to search_items
-        search_items['Search'] = ''
-        search_items['Page'] = constants.not_found
-        search_items['Source'] = ''
-        search_items['Destination'] = ''
-
-        # get search text for each item
-        search_items = self._create_search(search_items)
-
-        return search_items
-
-    def _create_search(self, search_items):
-        if self.search_type == 'tag':
-            search_items['Search'] = search_items.apply(lambda row: tag.get_search_strings(row['Tag No']),
-                                                        axis=1)
-        elif self.search_type == 'model':
-            search_items['Search'] = search_items.apply(lambda row: model.get_search_strings(row['Model']), axis=1)
+    def _generate_file_name(self, row: pandas.DataFrame) -> str:
+        """
+        Generates a file name based on the split type and item.
+        :param row: The row to write a file name for.
+        :return: The filename.
+        """
+        # generate output file name
+        if self.type == 'tag':
+            file_name = tag.create_file_name(row['Tag No'])
+        elif self.type == 'model':
+            file_name = model.create_file_name(row['Model'])
         else:
-            logging.error(f"Search type {self.search_type} not recognized")
-        return search_items
-
-    @staticmethod
-    def _filter_search_items(search_items):
-        # only search for items that have not been found
-        filtered_items = search_items.loc[search_items['Page'] == constants.not_found]
-
-        return filtered_items
-
-    @staticmethod
-    def _search_for_items(pdf, search_items):
-        # search each row in dataframe
-        search_items['Page'] = search_items.apply(lambda row: pdf.search_list(row['Search']), axis=1)
-
-        # record source pdf
-        search_items['Source'] = pdf.name
-
-        return search_items
-
-    def _split_pdf(self, search_items, pdf):
-        # iterate through each item in search items
-        for idx, row in search_items.iterrows():
-            # skip items which were not found
-            if search_items.at[idx, 'Page'] == constants.not_found:
-                logging.info(f"{search_items.at[idx, 'Tag No']} not found in {pdf.name}, skipping split...")
-
-                # log tag as not found
-                search_items.at[idx, 'Destination'] = constants.not_applicable
-                logging.debug(search_items.at[idx, 'Destination'])
-
-                # skip this tag
-                continue
-
-            # get range of pages to extract
-            page_range = self._get_page_range(idx, search_items)
-
-            # generate output file name
-            if self.search_type == constants.calibration:
-                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
-            elif self.search_type == constants.atex:
-                file_name = atex.create_file_name(search_items.at[idx, 'Model'])
-            else:
-                logging.error(f"Search type {self.search_type} not recognized.")
-                file_name = calibration.create_file_name(search_items.at[idx, 'Tag No'])
-
-            # save output file name
-            search_items.at[idx, 'Destination'] = file_name
-
-            # create output path
-            output_path = self.output_folder / f'{file_name}.pdf'
-
-            # split and write to file
-            # check if file exists
-            if output_path.is_file():
-                logging.warning(f"File {output_path} already exists, skipping split...")
-            else:
-                if not pdf.split(page_range, output_path):
-                    # if pdf fails to split, change destination to not applicable
-                    search_items.at[idx, 'Destination'] = constants.not_applicable
-
-        return search_items
-
-    @staticmethod
-    def _get_page_range(idx_search, search_items):
-        # set first page number
-        page_range = {
-            'first': search_items.at[idx_search, 'Page']
-        }
-
-        # sort values by page number
-        sorted_search_items = search_items.sort_values(by='Page')
-
-        # sort search for item with higher page number
-        idx_adjacent = numpy.searchsorted(sorted_search_items.Page.values, page_range['first'], side='right')
-        page_range['last'] = sorted_search_items.at[idx_adjacent, 'Page']
-        logging.debug(f"Last page for {search_items.at[idx_search, 'Tag No']} set to {page_range['last']}")
-
-        return page_range
-
-    def _dump_dataframe(self, dataframe):
-        """
-        Dumps the generated dataframe to an Excel document in the output folder.
-        :param dataframe:
-        """
-        # create output file name
-        output_name = self.output_folder / f"{self.search_type}_search_split_results.xlsx"
-
-        # dump dataframe to xlsx
-        dataframe.to_excel(output_name, sheet_name='Instrument Index')
-
-    def _get_execution_time(self):
-        execution_time = time.time() - self.start_time
-        return datetime.timedelta(seconds=execution_time)
+            logging.error(f"Search type {self.type} not recognized.")
+            file_name = tag.create_file_name(row['Tag No'])
+        return file_name

@@ -77,4 +77,4 @@ class PdfTool:
         """
         pct_execution = n_processed / n_total * 100.0
         estimated_time_remaining = self.get_execution_time() * (n_total - n_processed)
-        logging.info(f"{pct_execution}% of PDFs processed, estimated time remaining is {estimated_time_remaining}.")
+        logging.info(f"{pct_execution}% of items processed, estimated time remaining is {estimated_time_remaining}.")
