@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pandas
 
@@ -28,10 +29,16 @@ class SearchPdfs(pdf_tools.PdfTool):
         Searches through all PDFs for items and saves the PDF they are found in and the page range in the search index.
         :return: The search index with the page range and source file where the search item was found.
         """
-        for pdf in self.ls_pdf:
+        # process pdfs
+        for idx, pdf in enumerate(self.ls_pdf):
             # search for items in pdf
             self._search(pdf)
             logging.info(f"Done searching in {pdf.name}!")
+            logging.info(f"Time to process PDF: {self.get_execution_time()}")
+
+            logging.info(f"{self.get_pct_execution(n_processed=idx+1, n_total=len(self.ls_pdf))}% of PDFs processed, "
+                         f"estimated time "
+                         f"remaining is {self.estimate_time_remaining(n_processed=idx+1, n_total=len(self.ls_pdf))}.")
 
         logging.info(f"Done searching all PDFs.")
         return self.index

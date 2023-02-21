@@ -51,6 +51,16 @@ class PdfTool:
     def _timestamp():
         return time.time()
 
-    def _get_execution_time(self):
+    def start_timer(self):
+        self.start_time = self._timestamp()
+
+    def get_execution_time(self):
         execution_time = self._timestamp() - self.start_time
         return datetime.timedelta(seconds=execution_time)
+
+    @staticmethod
+    def get_pct_execution(n_processed, n_total):
+        return n_processed / n_total
+
+    def estimate_time_remaining(self, n_processed, n_total):
+        return self.get_execution_time() * (n_total - n_processed)

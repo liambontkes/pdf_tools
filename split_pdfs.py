@@ -12,12 +12,11 @@ import time
 import numpy
 import pandas
 
-import model
-import tag
 import constants
-import hmi
+import model
 import pdf_handler
 import pdf_tools
+import tag
 
 
 class SplitPdfs(pdf_tools.PdfTool):
@@ -162,11 +161,11 @@ class SearchAndSplit:
         return search_items
 
     def _create_search(self, search_items):
-        if self.search_type == constants.calibration:
-            search_items['Search'] = search_items.apply(lambda row: calibration.get_search_strings(row['Tag No']),
+        if self.search_type == 'tag':
+            search_items['Search'] = search_items.apply(lambda row: tag.get_search_strings(row['Tag No']),
                                                         axis=1)
-        elif self.search_type == constants.atex:
-            search_items['Search'] = search_items.apply(lambda row: atex.get_search_strings(row['Model']), axis=1)
+        elif self.search_type == 'model':
+            search_items['Search'] = search_items.apply(lambda row: model.get_search_strings(row['Model']), axis=1)
         else:
             logging.error(f"Search type {self.search_type} not recognized")
         return search_items
