@@ -128,6 +128,16 @@ class InstrumentIndex:
 
         return rows
 
+    def get_by_destination(self, destination, sort=True):
+        # extract rows with common destination
+        rows = self.df.loc[self.df['Destination'] == destination]
+
+        # sort by Tag No
+        if sort:
+            rows = rows.sort_values(by='Tag No')
+
+        return rows
+
     def get_no_page_range(self):
         """
         Finds all items which have been found but not assigned a page range.

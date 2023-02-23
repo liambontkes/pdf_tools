@@ -1,3 +1,4 @@
+import decimal
 import logging
 import math
 import pathlib
@@ -91,7 +92,7 @@ class PdfHandler:
             logging.error(f"{error}. Unable to write {path.name} to file.")
             return False
 
-    def annotate_tags(self, page_number, tags, path):
+    def annotate_tags(self, page_number: int, tags: list[str], path: pathlib.Path) -> bool:
         # get page height and width
         box = self.reader.pages[page_number].mediabox
         page_width = box.width
@@ -125,7 +126,7 @@ class TagsAnnotation:
     width_scale = 3.6
     text_buffer = 10
 
-    def __init__(self, tags, page_height, page_width):
+    def __init__(self, tags: list[str], page_height: decimal.Decimal, page_width: decimal.Decimal) -> None:
         self.tags = tags
         self.page_width = float(page_width)
         self.page_height = float(page_height)
