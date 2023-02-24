@@ -1,3 +1,5 @@
+import pathlib
+
 # error handling
 not_found = -1
 not_applicable = 'N/A'
@@ -12,5 +14,5 @@ df_columns = {
 }
 
 # paths
-batch_root = r'C:\Users\BONT17424\PycharmProjects\pdf_search_split\batch'
-instrument_index = r'C:\Users\BONT17424\PycharmProjects\pdf_search_split\misc\Instrument Index - Working.xlsx'
+p_data = pathlib.Path.cwd() / 'data'
+p_indexes = pathlib.Path.cwd() / 'misc' / 'indexes'

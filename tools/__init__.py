@@ -2,11 +2,12 @@ import datetime
 import logging
 import time
 
-import handlers.instrument_index
-from annotate import Annotate
-from search import Search
-from split import Split
+import handlers
 
+# local imports
+import annotate
+import search
+import split
 
 LS_TOOLS = ['annotate', 'search', 'split']
 
@@ -54,6 +55,18 @@ class PdfTool:
         estimated_time_remaining = self.get_execution_time() * (n_total - n_processed)
         logging.info(f"{pct_execution}% of items processed, estimated time remaining is {estimated_time_remaining}.")
 
-def search_and_split(p_in, p_out, split_type):
+
+def search_and_split(p_in, p_out, p_index, stype):
     # import instrument index
-    index = handlers.instrument_index.InstrumentIndex()
+    index = handlers.instrument_index.InstrumentIndex(p_index)
+
+    # search pdfs
+    search_index = search.Search(p_in, p_out, index, search_type=stype).run()
+
+    # split pdfs
+    split_index = split.Split(stype, p_in, p_out, search_index).run()
+
+    # dump index to file
+    p_dump = p_out / f"Search and Split Output.xlsx"
+    split_index.dump(p_dump)
+    logging.info(f"Search and split complete!")

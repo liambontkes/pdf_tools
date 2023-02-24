@@ -1,34 +1,51 @@
-import pathlib
+import logging
 
 import constants
 
 
-def get_batch_process(selection):
-    # set data root dir
-    batch_root = pathlib.Path(constants.batch_root)
-
+def get_data(pattern):
     # get data to process
-    batch_root = pathlib.Path(constants.batch_root)
-    if len(sorted(batch_root.glob(selection))) != 0:
-        print(f"Found batch for supplier {selection}.")
-        batch_path = sorted(batch_root.glob(selection))[0]
+    p_data = sorted(constants.p_data.glob(pattern))[0]
+    if p_data.exists():
+        logging.info(f"Found data for {pattern}.")
     else:
-        print(f"No batch found for supplier {selection}. Create one using create_batch.")
-        batch_path = False
+        logging.error(f"No batch found for supplier {pattern}.")
+        p_data = False
 
-    return batch_path
+    return p_data
 
 
-def get_tool(selection):
-    # select document type to process
-    if selection == constants.atex or selection == 'x':
-        tool = constants.atex
-    elif selection == constants.calibration or selection == 'c':
-        tool = constants.calibration
-    elif selection == constants.sort or selection == 's':
-        tool = constants.sort
+def get_index(pattern):
+    # glob excel
+    p_index = sorted(constants.p_indexes.glob(pattern))[0]
+    if p_index.exists():
+        logging.info(f"Found instrument index for {pattern}.")
     else:
-        print(f"Tool {selection} not recognized.")
-        tool = False
+        logging.error(f"No instrument index found for {pattern}.")
+        p_index = False
 
-    return tool
+    return p_index
+
+
+def get_tool(pattern):
+    if pattern == 'annotate' or pattern == 'a':
+        return 'annotate'
+    elif pattern == 'search' or pattern == 's':
+        return 'search'
+    elif pattern == 'split' or pattern == 'p':
+        return 'split'
+    elif pattern == 'searchsplit' or pattern == 'ss':
+        return 'search and split'
+    else:
+        logging.error(f"No tool selection for {pattern}.")
+        return False
+
+
+def get_type(pattern):
+    if pattern == 'tag' or pattern == 't':
+        return 'tag'
+    elif pattern == 'model' or pattern == 's':
+        return 'model'
+    else:
+        logging.error(f"No tool selection for {pattern}.")
+        return False

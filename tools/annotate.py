@@ -3,11 +3,11 @@ import pathlib
 
 import constants
 import tools
-from handlers import instrument_index
+import handlers
 
 
 class Annotate(tools.PdfTool):
-    def __init__(self, input_path: pathlib.Path, output_path: pathlib.Path, index: instrument_index.InstrumentIndex, annotate_type: str) -> None:
+    def __init__(self, input_path: pathlib.Path, output_path: pathlib.Path, index: handlers.InstrumentIndex, annotate_type: str) -> None:
         self.index = index
         self.type = annotate_type
         super().__init__(input_path, output_path)
@@ -24,7 +24,7 @@ class Annotate(tools.PdfTool):
             self._annotate(pdf, annotation)
 
     def _get_ls_pdf(self):
-        return pdf_handler.get_pdfs(self.input_folder)
+        return handlers.get_pdfs(self.input_folder)
 
     def _get_annotation(self, pdf) -> list[str]:
         # extract all items which point to the pdf

@@ -10,12 +10,12 @@ import pathlib
 import pandas
 
 import constants
-from handlers import instrument_index, tag, model
+import handlers
 import tools
 
 
 class Split(tools.PdfTool):
-    def __init__(self, split_type: str, input_path: pathlib.Path, output_path: pathlib.Path, index: instrument_index.InstrumentIndex) -> None:
+    def __init__(self, split_type: str, input_path: pathlib.Path, output_path: pathlib.Path, index: handlers.InstrumentIndex) -> None:
         """
         PDF Split tool, subclass of PdfTool.
         :param split_type: The type of items to split on.
@@ -27,7 +27,7 @@ class Split(tools.PdfTool):
         self.type = split_type
         super().__init__(input_path, output_path)
 
-    def run(self) -> bool:
+    def run(self) -> handlers.InstrumentIndex:
         """
         Splits all PDFs in the index based on split type.
         :return: Boolean whether split was successful.
@@ -73,7 +73,7 @@ class Split(tools.PdfTool):
             logging.error(f"Split type {self.type} not recognized. Skipping split...")
 
         logging.info(f"Done splitting PDFs.")
-        return True
+        return self.index
 
     def _split_pdf(self, row: pandas.DataFrame) -> str:
         """
@@ -110,10 +110,10 @@ class Split(tools.PdfTool):
         """
         # generate output file name
         if self.type == 'tag':
-            file_name = tag.create_file_name(row['Tag No'])
+            file_name = handlers.tag.create_file_name(row['Tag No'])
         elif self.type == 'model':
-            file_name = model.create_file_name(row['Model'])
+            file_name = handlers.model.create_file_name(row['Model'])
         else:
             logging.error(f"Search type {self.type} not recognized.")
-            file_name = tag.create_file_name(row['Tag No'])
+            file_name = handlers.tag.create_file_name(row['Tag No'])
         return file_name

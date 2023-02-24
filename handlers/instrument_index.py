@@ -10,7 +10,7 @@ import tag
 
 class InstrumentIndex:
     def __init__(self, source, supplier=False):
-        self.source = pathlib.Path(source)
+        self.source = source
         self.supplier = supplier
 
         # import dataframe
@@ -37,8 +37,10 @@ class InstrumentIndex:
         # drop cells without tag numbers
         self.df = self.df.dropna(subset=['Tag No'])
 
-        # fix tag notation
-        self.df['Tag No'] = self.df['Tag No'].replace(to_replace='-', value='_', regex=True)
+        # custom data cleaning for Northvolt
+        if 'Northvolt' in self.source.stem:
+            # fix tag notation
+            self.df['Tag No'] = self.df['Tag No'].replace(to_replace='-', value='_', regex=True)
 
         # interpret all Models as strings
         self.df['Model'] = self.df['Model'].astype('string')

@@ -4,7 +4,7 @@ import numpy
 import pandas
 
 import constants
-from handlers import pdf
+import handlers
 import tools
 
 
@@ -21,19 +21,19 @@ class Search(tools.PdfTool):
         self.type = search_type
         super().__init__(input_path, output_path)
 
-        # get list of pdfs to process
+        # get list of files to process
         self.ls_pdf = self._get_ls_pdf()
 
-    def run(self) -> pandas.DataFrame:
+    def run(self) -> handlers.InstrumentIndex:
         """
         Searches through all PDFs for items and saves the PDF they are found in and the page range in the search index.
         :return: The search index with the page range and source file where the search item was found.
         """
         # process pdfs
-        for idx, pdf in enumerate(self.ls_pdf):
+        for idx, f_pdf in enumerate(self.ls_pdf):
             # search for items in pdf
-            self._search(pdf)
-            logging.info(f"Done searching in {pdf.name}!")
+            self._search(f_pdf)
+            logging.info(f"Done searching in {f_pdf.name}!")
 
             # log execution stats
             self.log_execution(n_processed=idx + 1, n_total=len(self.ls_pdf))
@@ -49,33 +49,33 @@ class Search(tools.PdfTool):
         Gets a list of PDFs to process from the input folder.
         :return: A list of PDF handlers.
         """
-        return pdf_handler.get_pdfs(self.input_folder)
+        return pdf.get_pdfs(self.input_folder)
 
-    def _search(self, pdf: pdf_handler.PdfHandler) -> bool:
+    def _search(self, f_pdf: pdf.PdfHandler) -> bool:
         """
         Searches through the PDF for strings in instrument index.
-        :param pdf: The PDF to search in.
+        :param f_pdf: The PDF to search in.
         :return: Whether the search completed successfully.
         """
         if self.type == 'tag':
-            self._search_tags(pdf)
+            self._search_tags(f_pdf)
             return True
         elif self.type == 'model':
-            self._search_models(pdf)
+            self._search_models(f_pdf)
             return True
         else:
             logging.error(f"Split type {self.type} not recognized. Skipping search...")
             return False
 
-    def _search_tags(self, pdf: pdf_handler.PdfHandler) -> bool:
+    def _search_tags(self, f_pdf: pdf.PdfHandler) -> bool:
         """
         Searches through the PDF for Tag numbers.
-        :param pdf: The PDF to search in.
+        :param f_pdf: The PDF to search in.
         :return: Boolean if search was successful.
         """
         # get tags from instrument index
         df_tags = self.index.get_tags()
-        df_tags['First Page'] = df_tags.apply(lambda row: pdf.search_list(row['Search']), axis=1)
+        df_tags['First Page'] = df_tags.apply(lambda row: f_pdf.search_list(row['Search']), axis=1)
 
         # save pdf to source if found
         df_tags.loc[df_tags['First Page'] != constants.not_found, 'Source'] = pdf
@@ -85,10 +85,10 @@ class Search(tools.PdfTool):
 
         return True
 
-    def _search_models(self, pdf: pdf_handler.PdfHandler) -> bool:
+    def _search_models(self, f_pdf: pdf.PdfHandler) -> bool:
         """
         Searches through the PDF for Model numbers.
-        :param pdf: The PDF to search in.
+        :param f_pdf: The PDF to search in.
         :return: Boolean if search was successful.
         """
         # get list of models
@@ -98,8 +98,8 @@ class Search(tools.PdfTool):
         for mdl in ls_models:
             # get all tags associated with the model
             df_model = self.index.get_by_model(mdl)
-            df_model['First Page'] = pdf.search_list(df_model.at[0, 'Search'])
-            logging.info(f"Finished searching for {mdl} in {pdf.name}")
+            df_model['First Page'] = f_pdf.search_list(df_model.at[0, 'Search'])
+            logging.info(f"Finished searching for {mdl} in {f_pdf.name}")
 
             # save pdf to source if found
             df_model.loc[df_model['First Page'] != constants.not_found, 'Source'] = pdf
