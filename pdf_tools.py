@@ -1,28 +1,42 @@
-import datetime
 import logging
-import pathlib
-import time
 
 import click
 
-import constants
 import hmi
 
 
 @click.command()
-@click.option('--batch', '-B',
+@click.option('--project', '-P',
               required=True,
-              prompt="Batch to process",
-              help="The batch to process.")
+              prompt="Project to process",
+              help="The project to process.")
 @click.option('--tool', '-T',
-              type=click.Choice([constants.atex, constants.calibration, constants.annotate]),
+              type=click.Choice(['annotate', 'search', 'split']),
               case_sensitive=False,
               required=True,
               prompt="Tool to run",
-              help="The tool to run on the batch.")
-def pdf_tools(batch, tool):
-    # set log level
-    logging.basicConfig(level=logging.DEBUG)
+              help="The tool to run on the project.")
+@click.option('--log', '-L',
+              type=click.Choice(['debug', 'info', 'warning', 'error']),
+              default='warning',
+              required=False,
+              help="Log level to set.")
+def pdf_tools(batch, tool, log):
+    if log == 'debug':
+        # set log level
+        logging.basicConfig(level=logging.DEBUG)
+    if log == 'info':
+        # set log level
+        logging.basicConfig(level=logging.INFO)
+    if log == 'warning':
+        # set log level
+        logging.basicConfig(level=logging.WARNING)
+    if log == 'error':
+        # set log level
+        logging.basicConfig(level=logging.ERROR)
+    else:
+        # set log level to default
+        logging.basicConfig(level=logging.WARNING)
 
     # check selections
     batch_path = hmi.get_batch_process(batch)
@@ -34,47 +48,3 @@ def pdf_tools(batch, tool):
     input_folder_path = batch_path / tool / "input"
     output_folder_path = batch_path / tool / "output"
     output_folder_path.mkdir(parents=True, exist_ok=True)
-
-
-class PdfTool:
-    def __init__(self, input_path, output_path):
-        self.start_time = None
-
-        # set I/O folders
-        self.input_folder = input_path
-        self.output_folder = output_path
-
-        # set supplier name
-        self.supplier = self.input_folder.parent.name
-
-    @staticmethod
-    def _timestamp() -> time.time:
-        """
-        Creates a timestamp at the current time.
-        :return: The current time.
-        """
-        return time.time()
-
-    def start_timer(self) -> None:
-        """
-        Sets the start time timestamp.
-        """
-        self.start_time = self._timestamp()
-
-    def get_execution_time(self) -> datetime.timedelta:
-        """
-        Gets the execution time of tool.
-        :return: The execution time since the timer started.
-        """
-        execution_time = self._timestamp() - self.start_time
-        return datetime.timedelta(seconds=execution_time)
-
-    def log_execution(self, n_processed: int, n_total: int) -> None:
-        """
-        Logs the completion percentage and estimated time remaining.
-        :param n_processed: The number of processed items.
-        :param n_total: The total number of items to process.
-        """
-        pct_execution = n_processed / n_total * 100.0
-        estimated_time_remaining = self.get_execution_time() * (n_total - n_processed)
-        logging.info(f"{pct_execution}% of items processed, estimated time remaining is {estimated_time_remaining}.")

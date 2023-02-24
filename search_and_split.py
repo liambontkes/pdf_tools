@@ -13,10 +13,7 @@ import numpy
 import pandas
 
 import constants
-import model
-import pdf_handler
-import pdf_tools
-import tag
+from handlers import tag, pdf, model
 
 
 class SearchAndSplit:

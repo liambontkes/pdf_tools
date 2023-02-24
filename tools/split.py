@@ -4,23 +4,17 @@
 # Description: Parses the Excel doc for a list of tags to search for in the PDF doc.
 # It will then extract the relevant pages from the PDF doc and rename them according
 # to their tag.
-import datetime
 import logging
 import pathlib
-import time
 
-import numpy
 import pandas
 
 import constants
-import instrument_index
-import model
-import pdf_handler
-import pdf_tools
-import tag
+from handlers import instrument_index, tag, model
+import tools
 
 
-class SplitPdfs(pdf_tools.PdfTool):
+class Split(tools.PdfTool):
     def __init__(self, split_type: str, input_path: pathlib.Path, output_path: pathlib.Path, index: instrument_index.InstrumentIndex) -> None:
         """
         PDF Split tool, subclass of PdfTool.

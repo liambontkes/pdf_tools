@@ -4,10 +4,10 @@ import constants
 
 
 def get_batch_process(selection):
-    # set batch root dir
+    # set data root dir
     batch_root = pathlib.Path(constants.batch_root)
 
-    # get batch to process
+    # get data to process
     batch_root = pathlib.Path(constants.batch_root)
     if len(sorted(batch_root.glob(selection))) != 0:
         print(f"Found batch for supplier {selection}.")

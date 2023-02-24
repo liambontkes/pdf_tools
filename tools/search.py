@@ -4,11 +4,11 @@ import numpy
 import pandas
 
 import constants
-import pdf_handler
-import pdf_tools
+from handlers import pdf
+import tools
 
 
-class SearchPdfs(pdf_tools.PdfTool):
+class Search(tools.PdfTool):
     def __init__(self, input_path, output_path, instrument_index, search_type):
         """
         PDF Search tool, subclass of PdfTool.

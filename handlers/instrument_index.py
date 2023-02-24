@@ -3,13 +3,13 @@ import pathlib
 
 import pandas
 
+import handlers
 import model
 import tag
-import constants
 
 
 class InstrumentIndex:
-    def __init__(self, source, supplier):
+    def __init__(self, source, supplier=False):
         self.source = pathlib.Path(source)
         self.supplier = supplier
 
@@ -28,9 +28,10 @@ class InstrumentIndex:
         return df
 
     def _clean(self):
-        # limit search to supplier
-        self.df = self.df[self.df['Supplied By'] == self.supplier]
-        logging.info(f"Limited search to {self.supplier}, number of items to search for is now {len(self.df)}")
+        if self.supplier:
+            # limit search to supplier
+            self.df = self.df[self.df['Supplied By'] == self.supplier]
+            logging.info(f"Limited search to {self.supplier}, number of items to search for is now {len(self.df)}")
 
         # clean search items
         # drop cells without tag numbers
@@ -49,9 +50,9 @@ class InstrumentIndex:
         for column in required_columns:
             if column not in self.df.columns:
                 if 'Page' in column:
-                    self.df[column] = constants.not_found
+                    self.df[column] = handlers.NOT_FOUND
                 else:
-                    self.df[column] = constants.empty
+                    self.df[column] = handlers.EMPTY
 
     def _set_search(self, split_type):
         if split_type == 'tag':
@@ -73,7 +74,7 @@ class InstrumentIndex:
 
         # otherwise only return tags which have not been found yet
         else:
-            return self.df.loc[self.df['Source'] == constants.empty]
+            return self.df.loc[self.df['Source'] == handlers.EMPTY]
 
     def get_by_tag(self, tag_id, return_if_found=False):
         # extract row associated with tag no
@@ -81,7 +82,7 @@ class InstrumentIndex:
 
         # if return_if_found is not set and page has already been found
         # do not return
-        if not return_if_found and row['Source'] != constants.empty:
+        if not return_if_found and row['Source'] != handlers.EMPTY:
             return False
         else:
             return row
@@ -93,7 +94,7 @@ class InstrumentIndex:
 
         # otherwise only return models which have not been found
         else:
-            nf_models = self.df.loc[self.df['Source'] == constants.empty]
+            nf_models = self.df.loc[self.df['Source'] == handlers.EMPTY]
             return nf_models['Model'].unique()
 
     def get_by_model(self, model_id, return_if_found=False):
@@ -102,7 +103,7 @@ class InstrumentIndex:
 
         # if return_if_found is not set and page has already been found
         # do not return
-        if not return_if_found and rows.at[0, 'Source'] != constants.empty:
+        if not return_if_found and rows.at[0, 'Source'] != handlers.EMPTY:
             logging.info(f"Model {model_id} has already been found.")
             return False
         else:
@@ -115,7 +116,7 @@ class InstrumentIndex:
 
         # otherwise only return sources which have not been assigned destinations
         else:
-            nf_sources = self.df.loc[self.df['Destination'] == constants.empty]
+            nf_sources = self.df.loc[self.df['Destination'] == handlers.EMPTY]
             return nf_sources['Source'].unique()
 
     def get_by_source(self, source, sort=True):
@@ -143,7 +144,7 @@ class InstrumentIndex:
         Finds all items which have been found but not assigned a page range.
         :return: Items which have not been assigned a page range.
         """
-        return self.df.loc[self.df['First Page'] != constants.not_found and self.df['Last Page'] == constants.not_found]
+        return self.df.loc[self.df['First Page'] != handlers.NOT_FOUND and self.df['Last Page'] == handlers.NOT_FOUND]
 
     def update(self, df_update):
         self.df.update(df_update)

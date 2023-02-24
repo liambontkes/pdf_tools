@@ -1,6 +1,5 @@
 import decimal
 import logging
-import math
 import pathlib
 
 import pypdf

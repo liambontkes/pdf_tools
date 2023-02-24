@@ -5,7 +5,7 @@ import shutil
 if __name__ == "__main__":
     supplier = input("What is the supplier code?: ")
 
-    # create path to batch root
+    # create path to data root
     root = pathlib.Path(constants.batch_root)
 
     # path to input Excel file
