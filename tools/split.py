@@ -10,24 +10,26 @@ import pathlib
 import pandas
 
 import constants
-import handlers
+import handlers.model
+import handlers.tag
+import handlers.instrument_index
 import tools
 
 
 class Split(tools.PdfTool):
-    def __init__(self, split_type: str, input_path: pathlib.Path, output_path: pathlib.Path, index: handlers.InstrumentIndex) -> None:
+    def __init__(self, split_type: str, input_path: pathlib.Path, output_path: pathlib.Path, index: handlers.instrument_index.InstrumentIndex) -> None:
         """
         PDF Split tool, subclass of PdfTool.
         :param split_type: The type of items to split on.
-        :param input_path: The input folder to read from.
-        :param output_path: The output folder to write to.
+        :param input_path: The input name to read from.
+        :param output_path: The output name to write to.
         :param index: The Search Index to split by.
         """
         self.index = index
         self.type = split_type
         super().__init__(input_path, output_path)
 
-    def run(self) -> handlers.InstrumentIndex:
+    def run(self) -> handlers.instrument_index.InstrumentIndex:
         """
         Splits all PDFs in the index based on split type.
         :return: Boolean whether split was successful.

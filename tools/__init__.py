@@ -2,14 +2,12 @@ import datetime
 import logging
 import time
 
-import handlers
+import handlers.instrument_index
 
 # local imports
 import annotate
 import search
 import split
-
-LS_TOOLS = ['annotate', 'search', 'split']
 
 
 class PdfTool:
@@ -56,9 +54,10 @@ class PdfTool:
         logging.info(f"{pct_execution}% of items processed, estimated time remaining is {estimated_time_remaining}.")
 
 
-def search_and_split(p_in, p_out, p_index, stype):
+def search_and_split(p_in, p_out, stype, supplier=False):
     # import instrument index
-    index = handlers.instrument_index.InstrumentIndex(p_index)
+    p_index = sorted(p_in.glob('*.pdf'))[0]
+    index = handlers.instrument_index.InstrumentIndex(p_index, supplier)
 
     # search pdfs
     search_index = search.Search(p_in, p_out, index, search_type=stype).run()

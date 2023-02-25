@@ -1,11 +1,9 @@
 import logging
-import pathlib
 
 import pandas
 
-import handlers
-import model
-import tag
+import handlers.model
+import handlers.tag
 
 
 class InstrumentIndex:
@@ -22,6 +20,7 @@ class InstrumentIndex:
     def _import(self):
         # TODO add function to handle multiple import options
         # import from excel
+        # noinspection PyTypeChecker
         df = pandas.read_excel(self.source,
                                sheet_name='Instrument Index',
                                usecols=['Tag No', 'Supplied By', 'Model'])
@@ -58,11 +57,11 @@ class InstrumentIndex:
 
     def _set_search(self, split_type):
         if split_type == 'tag':
-            self.df['Search'] = self.df.apply(lambda row: tag.get_search_strings(row['Tag No']),
+            self.df['Search'] = self.df.apply(lambda row: handlers.tag.get_search_strings(row['Tag No']),
                                               axis=1)
             return True
         elif split_type == 'model':
-            self.df['Search'] = self.df.apply(lambda row: model.get_search_strings(row['Model']),
+            self.df['Search'] = self.df.apply(lambda row: handlers.model.get_search_strings(row['Model']),
                                               axis=1)
             return True
         else:
