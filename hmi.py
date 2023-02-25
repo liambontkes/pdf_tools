@@ -8,6 +8,7 @@ def get_data(pattern):
     p_data = sorted(constants.p_data.glob(pattern))[0]
     if p_data.exists():
         logging.info(f"Found data for {pattern}.")
+        logging.debug(f"p_data: {p_data}")
     else:
         logging.error(f"No batch found for supplier {pattern}.")
         p_data = False

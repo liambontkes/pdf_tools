@@ -13,10 +13,10 @@ import constants
 import handlers.model
 import handlers.tag
 import handlers.instrument_index
-import tools
+import tools.base
 
 
-class Split(tools.PdfTool):
+class Split(tools.base.PdfTool):
     def __init__(self, split_type: str, input_path: pathlib.Path, output_path: pathlib.Path, index: handlers.instrument_index.InstrumentIndex) -> None:
         """
         PDF Split tool, subclass of PdfTool.

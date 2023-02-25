@@ -2,12 +2,12 @@ import logging
 import pathlib
 
 import constants
-import tools
 import handlers.instrument_index
 import handlers.pdf
+import tools.base
 
 
-class Annotate(tools.PdfTool):
+class Annotate(tools.base.PdfTool):
     def __init__(self, input_path: pathlib.Path, output_path: pathlib.Path, index: handlers.instrument_index.InstrumentIndex, annotate_type: str) -> None:
         self.index = index
         self.type = annotate_type

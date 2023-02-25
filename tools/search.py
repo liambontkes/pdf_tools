@@ -6,10 +6,10 @@ import pandas
 import constants
 import handlers.instrument_index
 import handlers.pdf
-import tools
+import tools.base
 
 
-class Search(tools.PdfTool):
+class Search(tools.base.PdfTool):
     def __init__(self, input_path, output_path, instrument_index, search_type):
         """
         PDF Search tool, subclass of PdfTool.

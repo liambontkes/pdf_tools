@@ -14,13 +14,11 @@ import tools
               help="The data to process.")
 @click.option('--tool', '-T',
               type=click.Choice(['annotate', 'search', 'split', 'searchsplit']),
-              case_sensitive=False,
               required=True,
               prompt="Tool to run",
               help="The tool to run on the batch.")
 @click.option('--stype', '-Y',
               type=click.Choice(['tag', 'model']),
-              case_sensitive=False,
               required=True,
               prompt="Tool to run",
               help="The tool to run on the batch.")
@@ -58,12 +56,12 @@ def pdf_tools(data, tool, stype, supplier, log):
         exit()
 
     # set input and output name
-    p_in = constants.p_data / "input"
-    p_out = constants.p_data / "output"
+    p_in = p_data / "input"
+    p_out = p_data / "output"
 
     # run tool
     if tool == 'search and split':
-        tools.search_and_split(p_in, p_out, stype)
+        tools.search_and_split(p_in, p_out, stype, supplier)
 
 
 if __name__ == '__main__':
