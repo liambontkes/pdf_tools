@@ -18,6 +18,7 @@ def get_search_strings(model):
     elif re.search(r"\s+/\s+", model):
         combined_models = re.split(r"\s+/\s+", model)
         ls_search.extend(combined_models)
+
     # search for model outright
     else:
         ls_search.append(model)
